@@ -6,7 +6,8 @@ import type { AccountType } from "@/lib/supabase/database.types";
 export type ImportRow = {
   date: string;
   amount: number;
-  description: string;
+  recipient: string | null;
+  description: string | null;
 };
 
 export type AccountChoice =
@@ -104,7 +105,8 @@ export async function importTransactions(
       space_id: spaceId,
       category_id: null,
       amount: row.amount,
-      description: row.description,
+      recipient: row.recipient,
+      description: row.description ?? "",
       occurred_at: row.date,
       is_recurring: false,
     })),

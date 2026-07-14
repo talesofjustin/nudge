@@ -92,18 +92,17 @@ export function parseDate(raw: string | undefined): string | null {
   return null;
 }
 
-export function buildDescription(
-  recipient: string | undefined,
-  description: string | undefined,
-): string {
-  return [recipient?.trim(), description?.trim()].filter(Boolean).join(" — ");
+function cleanField(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 export type MappedRow = {
   raw: ParsedRow;
   date: string | null;
   amount: number | null;
-  description: string;
+  recipient: string | null;
+  description: string | null;
   valid: boolean;
 };
 
@@ -111,14 +110,13 @@ export function mapRows(rows: ParsedRow[], mapping: ColumnMapping): MappedRow[] 
   return rows.map((raw) => {
     const date = mapping.date ? parseDate(raw[mapping.date]) : null;
     const amount = mapping.amount ? parseAmount(raw[mapping.amount]) : null;
-    const description = buildDescription(
-      mapping.recipient ? raw[mapping.recipient] : undefined,
-      mapping.description ? raw[mapping.description] : undefined,
-    );
+    const recipient = mapping.recipient ? cleanField(raw[mapping.recipient]) : null;
+    const description = mapping.description ? cleanField(raw[mapping.description]) : null;
     return {
       raw,
       date,
       amount,
+      recipient,
       description,
       valid: date !== null && amount !== null,
     };

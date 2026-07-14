@@ -123,6 +123,7 @@ export function MappingStep({
               validRows.map((r) => ({
                 date: r.date!,
                 amount: r.amount!,
+                recipient: r.recipient,
                 description: r.description,
               })),
             )
