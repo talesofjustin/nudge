@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Papa from "papaparse";
 import { StepIndicator, type Step } from "@/components/import/step-indicator";
 import { UploadStep } from "@/components/import/upload-step";
@@ -14,6 +14,7 @@ import {
   type ImportRow,
   type SpaceChoice,
 } from "@/app/(app)/import/actions";
+import { upsertUserSettings, type UserSettings } from "@/lib/user-settings";
 import type { AccountType } from "@/lib/supabase/database.types";
 
 type AccountOption = { id: string; name: string; type: AccountType };
@@ -24,14 +25,17 @@ const EMPTY_MAPPING: ColumnMapping = {
   amount: null,
   recipient: null,
   description: null,
+  sign: null,
 };
 
 export function ImportWizard({
   accounts,
   spaces,
+  settings,
 }: {
   accounts: AccountOption[];
   spaces: SpaceOption[];
+  settings: UserSettings;
 }) {
   const [step, setStep] = useState<Step>("upload");
   const [reading, setReading] = useState(false);
@@ -53,6 +57,22 @@ export function ImportWizard({
   const [result, setResult] = useState<{ count: number; accountName: string } | null>(
     null,
   );
+
+  // Formalises the timezone the date parser's free-text fallback uses: the
+  // user's stored preference if they have one, otherwise the browser's own
+  // timezone, persisted silently below so it becomes an explicit, stable
+  // setting rather than an implicit one re-detected every time.
+  const [timezone] = useState(
+    () => settings.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
+  );
+
+  useEffect(() => {
+    if (settings.timezone) return;
+    void upsertUserSettings({ timezone });
+    // Only ever runs once per mount — settings.timezone is a server-fetched
+    // initial value, not expected to change during this session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleFile(file: File) {
     setReading(true);
@@ -131,6 +151,8 @@ export function ImportWizard({
           rows={rows}
           mapping={mapping}
           onChangeMapping={setMapping}
+          timezone={timezone}
+          defaultDecimalSeparator={settings.decimalSeparator}
           onBack={() => setStep("account")}
           onConfirm={handleConfirm}
           submitting={submitting}

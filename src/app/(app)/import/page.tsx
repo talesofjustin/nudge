@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { getUserSettings } from "@/lib/user-settings";
 import { ImportWizard } from "@/components/import/import-wizard";
 
 export default async function ImportPage() {
   const supabase = await createClient();
 
-  const [{ data: accounts }, { data: spaces }] = await Promise.all([
+  const [{ data: accounts }, { data: spaces }, settings] = await Promise.all([
     supabase
       .from("accounts")
       .select("id, name, type")
@@ -13,6 +14,7 @@ export default async function ImportPage() {
       .from("spaces")
       .select("id, name")
       .order("created_at", { ascending: true }),
+    getUserSettings(),
   ]);
 
   return (
@@ -24,7 +26,7 @@ export default async function ImportPage() {
         </p>
       </div>
 
-      <ImportWizard accounts={accounts ?? []} spaces={spaces ?? []} />
+      <ImportWizard accounts={accounts ?? []} spaces={spaces ?? []} settings={settings} />
     </div>
   );
 }

@@ -1,11 +1,22 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
+import { Select, SelectItem } from "@/components/ui/select";
+import { FilterChip } from "@/components/ui/pill";
 import { Button } from "@/components/ui/button";
-import { mapRows, type ColumnMapping, type ParsedRow } from "@/lib/csv";
+import {
+  distinctValues,
+  guessDecimalSeparator,
+  guessExpenseValue,
+  mapRows,
+  type ColumnMapping,
+  type ParsedRow,
+} from "@/lib/csv";
 import type { ImportRow } from "@/app/(app)/import/actions";
+import type { DecimalSeparator } from "@/lib/supabase/database.types";
+
+const UNSET = "__unset__";
 
 const FIELDS: { key: keyof ColumnMapping; label: string; required: boolean }[] = [
   { key: "date", label: "Date", required: true },
@@ -19,6 +30,8 @@ type Props = {
   rows: ParsedRow[];
   mapping: ColumnMapping;
   onChangeMapping: (mapping: ColumnMapping) => void;
+  timezone: string;
+  defaultDecimalSeparator: DecimalSeparator | null;
   onBack: () => void;
   onConfirm: (validRows: ImportRow[]) => void;
   submitting: boolean;
@@ -30,12 +43,39 @@ export function MappingStep({
   rows,
   mapping,
   onChangeMapping,
+  timezone,
+  defaultDecimalSeparator,
   onBack,
   onConfirm,
   submitting,
   submitError,
 }: Props) {
-  const mapped = useMemo(() => mapRows(rows, mapping), [rows, mapping]);
+  const [decimalSeparator, setDecimalSeparator] = useState<DecimalSeparator>(() => {
+    const samples = mapping.amount ? rows.slice(0, 20).map((r) => r[mapping.amount!]) : [];
+    return guessDecimalSeparator(samples) ?? defaultDecimalSeparator ?? "period";
+  });
+
+  const [expenseValue, setExpenseValue] = useState<string | null>(() =>
+    mapping.sign ? guessExpenseValue(distinctValues(rows, mapping.sign)) : null,
+  );
+
+  // Re-guess whenever the user picks a *different* sign column — the
+  // previous expense value wouldn't apply to a new column's values anyway.
+  // Adjusted during render (React's recommended pattern for state that
+  // depends on a prop change) rather than in an effect, which would cause
+  // an extra render pass.
+  const [prevSignColumn, setPrevSignColumn] = useState(mapping.sign);
+  if (mapping.sign !== prevSignColumn) {
+    setPrevSignColumn(mapping.sign);
+    setExpenseValue(mapping.sign ? guessExpenseValue(distinctValues(rows, mapping.sign)) : null);
+  }
+
+  const signValues = mapping.sign ? distinctValues(rows, mapping.sign) : [];
+
+  const mapped = useMemo(
+    () => mapRows(rows, mapping, { decimalSeparator, timezone, expenseValue }),
+    [rows, mapping, decimalSeparator, timezone, expenseValue],
+  );
   const validRows = mapped.filter((r) => r.valid);
   const skippedCount = mapped.length - validRows.length;
   const canConfirm = mapping.date !== null && mapping.amount !== null && validRows.length > 0;
@@ -54,19 +94,71 @@ export function MappingStep({
           <Select
             key={f.key}
             label={f.required ? f.label : `${f.label} (optional)`}
-            value={mapping[f.key] ?? ""}
-            onChange={(e) =>
-              onChangeMapping({ ...mapping, [f.key]: e.target.value || null })
+            value={mapping[f.key] ?? UNSET}
+            onValueChange={(value) =>
+              onChangeMapping({ ...mapping, [f.key]: value === UNSET ? null : value })
             }
           >
-            <option value="">{f.required ? "Select column" : "None"}</option>
+            <SelectItem value={UNSET}>{f.required ? "Select column" : "None"}</SelectItem>
             {headers.map((h) => (
-              <option key={h} value={h}>
+              <SelectItem key={h} value={h}>
                 {h}
-              </option>
+              </SelectItem>
             ))}
           </Select>
         ))}
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-canvas p-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-2">
+          <span className="text-[13px] font-medium text-muted">Amount format</span>
+          <div className="flex gap-2">
+            <FilterChip
+              active={decimalSeparator === "period"}
+              onClick={() => setDecimalSeparator("period")}
+            >
+              1,234.56
+            </FilterChip>
+            <FilterChip
+              active={decimalSeparator === "comma"}
+              onClick={() => setDecimalSeparator("comma")}
+            >
+              1.234,56
+            </FilterChip>
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-2 sm:max-w-xs">
+          <Select
+            label="Debit/credit column (optional)"
+            value={mapping.sign ?? UNSET}
+            onValueChange={(value) =>
+              onChangeMapping({ ...mapping, sign: value === UNSET ? null : value })
+            }
+          >
+            <SelectItem value={UNSET}>None — use amount&apos;s own sign</SelectItem>
+            {headers.map((h) => (
+              <SelectItem key={h} value={h}>
+                {h}
+              </SelectItem>
+            ))}
+          </Select>
+
+          {mapping.sign && (
+            <Select
+              label="Which value means money out?"
+              value={expenseValue ?? UNSET}
+              onValueChange={(value) => setExpenseValue(value === UNSET ? null : value)}
+            >
+              <SelectItem value={UNSET}>Select value</SelectItem>
+              {signValues.map((v) => (
+                <SelectItem key={v} value={v}>
+                  {v}
+                </SelectItem>
+              ))}
+            </Select>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-border">

@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Select, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import type { AccountType } from "@/lib/supabase/database.types";
 import type { AccountChoice, SpaceChoice } from "@/app/(app)/import/actions";
@@ -14,6 +14,8 @@ const ACCOUNT_TYPE_OPTIONS: { value: AccountType; label: string }[] = [
   { value: "cash", label: "Cash" },
   { value: "other", label: "Other" },
 ];
+
+const NO_SPACE = "__none__";
 
 type Props = {
   accounts: { id: string; name: string; type: AccountType }[];
@@ -48,12 +50,12 @@ export function AccountSpaceStep({
           <div className="flex flex-col gap-2">
             <Select
               value={accountChoice.id}
-              onChange={(e) => onChangeAccount({ kind: "existing", id: e.target.value })}
+              onValueChange={(value) => onChangeAccount({ kind: "existing", id: value })}
             >
               {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
+                <SelectItem key={a.id} value={a.id}>
                   {a.name}
-                </option>
+                </SelectItem>
               ))}
             </Select>
             <button
@@ -80,17 +82,17 @@ export function AccountSpaceStep({
               <Select
                 label="Type"
                 value={accountChoice.type}
-                onChange={(e) =>
+                onValueChange={(value) =>
                   onChangeAccount({
                     ...accountChoice,
-                    type: e.target.value as AccountType,
+                    type: value as AccountType,
                   })
                 }
               >
                 {ACCOUNT_TYPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
+                  <SelectItem key={o.value} value={o.value}>
                     {o.label}
-                  </option>
+                  </SelectItem>
                 ))}
               </Select>
             </div>
@@ -133,17 +135,17 @@ export function AccountSpaceStep({
         ) : (
           <div className="flex flex-col gap-2">
             <Select
-              value={spaceChoice.kind === "existing" ? spaceChoice.id : ""}
-              onChange={(e) => {
-                if (!e.target.value) onChangeSpace({ kind: "none" });
-                else onChangeSpace({ kind: "existing", id: e.target.value });
+              value={spaceChoice.kind === "existing" ? spaceChoice.id : NO_SPACE}
+              onValueChange={(value) => {
+                if (value === NO_SPACE) onChangeSpace({ kind: "none" });
+                else onChangeSpace({ kind: "existing", id: value });
               }}
             >
-              <option value="">No space</option>
+              <SelectItem value={NO_SPACE}>No space</SelectItem>
               {spaces.map((s) => (
-                <option key={s.id} value={s.id}>
+                <SelectItem key={s.id} value={s.id}>
                   {s.name}
-                </option>
+                </SelectItem>
               ))}
             </Select>
             <button
