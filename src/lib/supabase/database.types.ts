@@ -1,7 +1,8 @@
 // Hand-written to match supabase/migrations/20260714160602_initial_schema.sql.
 // Shaped the way `supabase gen types typescript` would produce it, so running
 // that command later (once the migration has been applied) is a drop-in
-// replacement for this file.
+// replacement for this file. `Relationships` is left empty here (no typed
+// nested-select embedding) — real codegen will populate it from the FKs.
 
 export type AccountType = "bank" | "paypal" | "credit_card" | "cash" | "other";
 
@@ -27,6 +28,7 @@ export type Database = {
           name?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       categories: {
         Row: {
@@ -53,6 +55,7 @@ export type Database = {
           icon?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       accounts: {
         Row: {
@@ -76,6 +79,7 @@ export type Database = {
           type?: AccountType;
           created_at?: string;
         };
+        Relationships: [];
       };
       transactions: {
         Row: {
@@ -117,6 +121,7 @@ export type Database = {
           recurring_group_id?: string | null;
           created_at?: string;
         };
+        Relationships: [];
       };
       budgets: {
         Row: {
@@ -143,7 +148,10 @@ export type Database = {
           amount?: number;
           created_at?: string;
         };
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
   };
 };

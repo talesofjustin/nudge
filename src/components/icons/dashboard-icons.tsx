@@ -110,3 +110,11 @@ export function ChevronRightIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5 13l5 5 9-11" />
+    </svg>
+  );
+}
