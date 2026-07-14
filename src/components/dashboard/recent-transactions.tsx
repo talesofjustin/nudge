@@ -117,7 +117,7 @@ export function RecentTransactions() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search transactions"
-            className="h-10 w-full rounded-full border border-border bg-canvas pl-10 pr-4 text-[14px] text-foreground outline-none transition-colors placeholder:text-muted-2 focus:border-violet-400 focus:bg-surface focus:ring-4 focus:ring-violet-400/15"
+            className="h-10 w-full rounded-full border border-border bg-canvas pl-10 pr-4 text-[14px] text-foreground outline-none transition-[color,background-color,border-color,box-shadow] placeholder:text-muted-2 focus:border-violet-400 focus:bg-surface focus:shadow-[0_0_0_3px_var(--violet-200)]"
           />
         </div>
         <div className="flex gap-2">
