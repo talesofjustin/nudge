@@ -5,7 +5,12 @@ import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
 import { logout } from "@/app/logout/actions";
 import { Wordmark } from "@/components/ui/wordmark";
-import { HeartIcon, TargetIcon, UploadIcon } from "@/components/icons/dashboard-icons";
+import {
+  HeartIcon,
+  SettingsIcon,
+  TargetIcon,
+  UploadIcon,
+} from "@/components/icons/dashboard-icons";
 import { GridIcon, ListIcon } from "@/components/icons/nav-icons";
 
 const NAV_ITEMS: {
@@ -18,6 +23,7 @@ const NAV_ITEMS: {
   { href: "/transactions", label: "Transactions", icon: ListIcon },
   { href: "/budget", label: "Budget", icon: TargetIcon },
   { href: "/wishlist", label: "Wishlist", icon: HeartIcon },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 export function Sidebar() {
