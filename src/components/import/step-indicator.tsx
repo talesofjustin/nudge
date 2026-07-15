@@ -20,7 +20,7 @@ export function StepIndicator({ step }: { step: Step }) {
             <span
               className={`inline-flex h-7 items-center justify-center rounded-full px-3 text-[12px] font-medium transition-colors ${
                 isActive
-                  ? "bg-ink text-white"
+                  ? "bg-ink-solid text-white"
                   : isComplete
                     ? "chip-violet"
                     : "border border-border bg-surface text-muted"

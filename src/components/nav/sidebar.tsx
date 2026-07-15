@@ -45,7 +45,7 @@ export function Sidebar() {
               href={item.href}
               className={`flex items-center gap-3 rounded-full px-3.5 py-2.5 text-[14px] font-medium transition-colors ${
                 active
-                  ? "bg-ink text-white"
+                  ? "bg-ink-solid text-white"
                   : "text-muted hover:bg-surface hover:text-foreground"
               }`}
             >

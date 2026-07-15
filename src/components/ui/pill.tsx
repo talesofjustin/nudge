@@ -29,7 +29,7 @@ export function FilterChip({
       type="button"
       className={`inline-flex h-8 items-center justify-center rounded-full px-3.5 text-[13px] font-medium transition-colors ${
         active
-          ? "bg-ink text-white"
+          ? "bg-ink-solid text-white"
           : "border border-border bg-surface text-muted hover:text-foreground"
       } ${className}`}
       {...props}

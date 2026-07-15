@@ -45,6 +45,13 @@
   --color-surface: var(--surface);
   --color-border: var(--border);
   --color-ink: var(--ink);
+  /* Fixed (non-theme-adaptive) counterpart to --ink. --ink flips light/dark
+     per theme, which is correct for text but breaks solid "active pill"
+     backgrounds paired with hardcoded white text (FilterChip, sidebar nav,
+     step indicator) — in dark mode --ink goes light, making white text
+     unreadable. ink-solid stays the same dark value in both themes so those
+     pills stay high-contrast regardless of color scheme. */
+  --color-ink-solid: #14121a;
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-muted-2: var(--muted-2);
