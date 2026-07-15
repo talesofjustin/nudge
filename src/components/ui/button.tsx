@@ -8,7 +8,7 @@ const base =
 // Colour is confined to `primary` (the gradient). `secondary` and `ghost`
 // stay neutral on purpose — colour never lands on a secondary surface.
 const variants: Record<ButtonVariant, string> = {
-  primary: "gradient-accent text-white shadow-accent hover:brightness-[1.04]",
+  primary: "gradient-accent text-white hover:shadow-accent hover:brightness-[1.04]",
   secondary:
     "border border-border bg-surface text-foreground hover:bg-canvas",
   ghost: "text-muted hover:bg-canvas hover:text-foreground",

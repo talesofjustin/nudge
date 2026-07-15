@@ -27,6 +27,7 @@ export async function importTransactions(
   account: AccountChoice,
   space: SpaceChoice,
   rows: ImportRow[],
+  filename: string | null,
 ): Promise<ImportResult> {
   const supabase = await createClient();
   const {
@@ -115,6 +116,15 @@ export async function importTransactions(
   if (insertError) {
     return { success: false, error: insertError.message };
   }
+
+  // Best-effort history log — the transactions themselves already landed
+  // successfully above, so a failure here shouldn't fail the whole import.
+  await supabase.from("imports").insert({
+    user_id: user.id,
+    account_id: accountId,
+    filename,
+    row_count: rows.length,
+  });
 
   return { success: true, count: rows.length, accountName };
 }

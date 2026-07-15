@@ -33,7 +33,7 @@ export function Select({
         <SelectPrimitive.Content
           position="popper"
           sideOffset={6}
-          className="shadow-soft z-50 max-h-[--radix-select-content-available-height] w-[--radix-select-trigger-width] overflow-hidden rounded-2xl border border-border bg-surface"
+          className="shadow-soft z-50 max-h-(--radix-select-content-available-height) w-(--radix-select-trigger-width) overflow-hidden rounded-2xl border border-border bg-surface"
         >
           <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
         </SelectPrimitive.Content>

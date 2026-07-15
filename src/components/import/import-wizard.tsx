@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Papa from "papaparse";
 import { StepIndicator, type Step } from "@/components/import/step-indicator";
 import { UploadStep } from "@/components/import/upload-step";
@@ -37,6 +38,8 @@ export function ImportWizard({
   spaces: SpaceOption[];
   settings: UserSettings;
 }) {
+  const router = useRouter();
+
   const [step, setStep] = useState<Step>("upload");
   const [reading, setReading] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -44,6 +47,7 @@ export function ImportWizard({
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_MAPPING);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   const [accountChoice, setAccountChoice] = useState<AccountChoice>(
     accounts.length > 0
@@ -77,6 +81,7 @@ export function ImportWizard({
   function handleFile(file: File) {
     setReading(true);
     setParseError(null);
+    setFileName(file.name || null);
 
     Papa.parse<ParsedRow>(file, {
       header: true,
@@ -103,7 +108,7 @@ export function ImportWizard({
   async function handleConfirm(validRows: ImportRow[]) {
     setSubmitting(true);
     setSubmitError(null);
-    const res = await importTransactions(accountChoice, spaceChoice, validRows);
+    const res = await importTransactions(accountChoice, spaceChoice, validRows, fileName);
     setSubmitting(false);
 
     if (!res.success) {
@@ -113,12 +118,16 @@ export function ImportWizard({
 
     setResult({ count: res.count, accountName: res.accountName });
     setStep("done");
+    // Re-fetch server data (accounts/spaces/settings + import history) in the
+    // background so the history list below reflects this import.
+    router.refresh();
   }
 
   function handleImportAnother() {
     setRows([]);
     setHeaders([]);
     setMapping(EMPTY_MAPPING);
+    setFileName(null);
     setSubmitError(null);
     setResult(null);
     setStep("upload");

@@ -89,8 +89,11 @@ body {
     0 8px 24px rgba(20, 18, 26, 0.06);
 }
 
-.shadow-accent {
-  box-shadow: 0 8px 20px rgba(124, 58, 237, 0.35);
+/* Hover-only glow for primary CTAs — no x/y offset, just a soft blur, and
+   only on hover (nothing at rest). Defined via @utility so it can take the
+   hover: variant like a normal Tailwind utility. */
+@utility shadow-accent {
+  box-shadow: 0 0 24px rgba(124, 58, 237, 0.4);
 }
 
 @media (prefers-color-scheme: dark) {
