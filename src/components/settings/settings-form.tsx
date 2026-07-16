@@ -1,17 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Select, SelectItem } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { FilterChip } from "@/components/ui/pill";
 import { Button } from "@/components/ui/button";
 import { upsertUserSettings, type UserSettings } from "@/lib/user-settings";
+import { getTimezoneOptions } from "@/lib/timezone";
 import type { DecimalSeparator } from "@/lib/supabase/database.types";
-
-const TIMEZONES: string[] =
-  typeof Intl.supportedValuesOf === "function"
-    ? Intl.supportedValuesOf("timeZone")
-    : ["UTC"];
 
 function detectDecimalSeparator(): DecimalSeparator {
   const parts = new Intl.NumberFormat(navigator.language).formatToParts(1.1);
@@ -30,6 +26,7 @@ export function SettingsForm({ settings }: { settings: UserSettings }) {
   const [timezone, setTimezone] = useState<string>(
     () => settings.timezone ?? detectTimezone(),
   );
+  const timezoneOptions = useMemo(() => getTimezoneOptions(), []);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -88,19 +85,15 @@ export function SettingsForm({ settings }: { settings: UserSettings }) {
             Used to interpret dates from imported CSV files correctly.
           </p>
         </div>
-        <Select
+        <SearchableSelect
           value={timezone}
           onValueChange={(value) => {
             setTimezone(value);
             setSaved(false);
           }}
-        >
-          {TIMEZONES.map((tz) => (
-            <SelectItem key={tz} value={tz}>
-              {tz}
-            </SelectItem>
-          ))}
-        </Select>
+          options={timezoneOptions}
+          searchPlaceholder="Search timezones…"
+        />
       </div>
 
       {error && (

@@ -33,9 +33,15 @@ export function Select({
         <SelectPrimitive.Content
           position="popper"
           sideOffset={6}
-          className="shadow-soft z-50 max-h-(--radix-select-content-available-height) w-(--radix-select-trigger-width) overflow-hidden rounded-2xl border border-border bg-surface"
+          className="shadow-soft z-50 w-(--radix-select-trigger-width) overflow-hidden rounded-2xl border border-border bg-surface"
         >
-          <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
+          {/* Fixed max-height (never taller than 18rem) so long lists scroll
+              inside the panel instead of stretching the page — but still
+              capped by the actual available space so it never overflows
+              past the viewport edge either. */}
+          <SelectPrimitive.Viewport className="max-h-[min(18rem,var(--radix-select-content-available-height))] overflow-y-auto p-1">
+            {children}
+          </SelectPrimitive.Viewport>
         </SelectPrimitive.Content>
       </SelectPrimitive.Portal>
     </SelectPrimitive.Root>
