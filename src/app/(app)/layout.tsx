@@ -5,7 +5,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-canvas">
       <Sidebar />
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6 py-6 pb-16">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6 pt-10 pb-16">
         {children}
       </main>
     </div>
