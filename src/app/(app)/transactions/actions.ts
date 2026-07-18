@@ -11,6 +11,7 @@ export type TransactionFilters = {
   amountMax: number | null;
   dateFrom: string | null;
   dateTo: string | null;
+  recipient: string | null;
 };
 
 export type TransactionRowData = {
@@ -53,6 +54,7 @@ export async function getFilteredTransactions(
   if (filters.amountMax !== null) query = query.lte("amount", filters.amountMax);
   if (filters.dateFrom) query = query.gte("occurred_at", filters.dateFrom);
   if (filters.dateTo) query = query.lte("occurred_at", filters.dateTo);
+  if (filters.recipient) query = query.ilike("recipient", filters.recipient);
 
   const [{ data, error }, ownAccountRecipients] = await Promise.all([
     query,
@@ -96,6 +98,9 @@ async function getOwnAccountSet(
 
 export type KnownRecipientData = { recipient: string; isOwnAccount: boolean };
 
+// Only recipients actively flagged as own-account — the Settings management
+// list is "recipients currently treated as transfers", not every recipient
+// the user has ever made a decision about.
 export async function getKnownRecipients(): Promise<KnownRecipientData[]> {
   const supabase = await createClient();
   const {
@@ -108,15 +113,16 @@ export async function getKnownRecipients(): Promise<KnownRecipientData[]> {
     .from("known_recipients")
     .select("recipient, is_own_account")
     .eq("user_id", user.id)
+    .eq("is_own_account", true)
     .order("recipient", { ascending: true });
 
   return (data ?? []).map((r) => ({ recipient: r.recipient, isOwnAccount: r.is_own_account }));
 }
 
-// Flagging inserts/updates a row; unflagging deletes it — known_recipients
-// only ever needs to hold recipients that ARE own accounts, so there is no
-// need to persist explicit `is_own_account: false` rows.
-export async function setRecipientOwnAccount(
+// Called from the import review step's transfer-detection flag. Always
+// leaves a row behind (true or false) so that recipient isn't asked about
+// again on future imports — unlike Settings' full "unflag" below.
+export async function resolveTransferFlag(
   recipient: string,
   isOwnAccount: boolean,
 ): Promise<{ success: boolean }> {
@@ -127,15 +133,24 @@ export async function setRecipientOwnAccount(
 
   if (!user) return { success: false };
 
-  if (isOwnAccount) {
-    const { error } = await supabase
-      .from("known_recipients")
-      .upsert(
-        { user_id: user.id, recipient, is_own_account: true },
-        { onConflict: "user_id,recipient" },
-      );
-    return { success: !error };
-  }
+  const { error } = await supabase
+    .from("known_recipients")
+    .upsert(
+      { user_id: user.id, recipient, is_own_account: isOwnAccount },
+      { onConflict: "user_id,recipient" },
+    );
+  return { success: !error };
+}
+
+// Called from Settings — a full reset. Deletes the row entirely, so this
+// recipient is eligible to be flagged again by a future import.
+export async function unflagKnownRecipient(recipient: string): Promise<{ success: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { success: false };
 
   const { error } = await supabase
     .from("known_recipients")
@@ -143,6 +158,25 @@ export async function setRecipientOwnAccount(
     .eq("user_id", user.id)
     .eq("recipient", recipient);
   return { success: !error };
+}
+
+export async function deleteTransactions(ids: string[]): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "You must be logged in." };
+  }
+  if (ids.length === 0) return { success: true };
+
+  const { error } = await supabase.from("transactions").delete().in("id", ids).eq("user_id", user.id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  return { success: true };
 }
 
 export async function updateTransaction(

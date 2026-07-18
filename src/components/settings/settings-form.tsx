@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { FilterChip } from "@/components/ui/pill";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { upsertUserSettings, type UserSettings } from "@/lib/user-settings";
 import { getTimezoneOptions } from "@/lib/timezone";
@@ -26,6 +27,9 @@ export function SettingsForm({ settings }: { settings: UserSettings }) {
   const [timezone, setTimezone] = useState<string>(
     () => settings.timezone ?? detectTimezone(),
   );
+  const [paydayAnchorDay, setPaydayAnchorDay] = useState<string>(
+    () => (settings.paydayAnchorDay ? String(settings.paydayAnchorDay) : ""),
+  );
   const timezoneOptions = useMemo(() => getTimezoneOptions(), []);
 
   const [saving, setSaving] = useState(false);
@@ -37,7 +41,13 @@ export function SettingsForm({ settings }: { settings: UserSettings }) {
     setSaved(false);
     setError(null);
 
-    const res = await upsertUserSettings({ decimalSeparator, timezone });
+    const parsedAnchor = Number(paydayAnchorDay);
+    const anchor =
+      paydayAnchorDay.trim() && Number.isInteger(parsedAnchor) && parsedAnchor >= 1 && parsedAnchor <= 31
+        ? parsedAnchor
+        : null;
+
+    const res = await upsertUserSettings({ decimalSeparator, timezone, paydayAnchorDay: anchor });
 
     setSaving(false);
     if (!res.success) {
@@ -93,6 +103,29 @@ export function SettingsForm({ settings }: { settings: UserSettings }) {
           }}
           options={timezoneOptions}
           searchPlaceholder="Search timezones…"
+        />
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-[15px] font-semibold text-ink">Payday anchor day</h2>
+          <p className="mt-1 text-[13px] text-muted">
+            Used to align monthly summaries with your payday instead of the calendar month.
+            Leave blank to use the 1st of the month.
+          </p>
+        </div>
+        <Input
+          label="Day of month (1–31)"
+          type="number"
+          min={1}
+          max={31}
+          placeholder="1"
+          value={paydayAnchorDay}
+          onChange={(e) => {
+            setPaydayAnchorDay(e.target.value);
+            setSaved(false);
+          }}
+          className="w-28"
         />
       </div>
 

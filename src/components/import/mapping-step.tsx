@@ -5,7 +5,6 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectItem } from "@/components/ui/select";
 import { FilterChip } from "@/components/ui/pill";
 import { Button } from "@/components/ui/button";
-import { ProcessingIndicator } from "@/components/import/processing-indicator";
 import {
   distinctValues,
   guessDecimalSeparator,
@@ -35,7 +34,6 @@ type Props = {
   defaultDecimalSeparator: DecimalSeparator | null;
   onBack: () => void;
   onConfirm: (validRows: ImportRow[], skippedCount: number) => void;
-  submitting: boolean;
   submitError: string | null;
 };
 
@@ -48,7 +46,6 @@ export function MappingStep({
   defaultDecimalSeparator,
   onBack,
   onConfirm,
-  submitting,
   submitError,
 }: Props) {
   const [decimalSeparator, setDecimalSeparator] = useState<DecimalSeparator>(() => {
@@ -80,14 +77,6 @@ export function MappingStep({
   const validRows = mapped.filter((r) => r.valid);
   const skippedCount = mapped.length - validRows.length;
   const canConfirm = mapping.date !== null && mapping.amount !== null && validRows.length > 0;
-
-  if (submitting) {
-    return (
-      <Card>
-        <ProcessingIndicator variant="importing" />
-      </Card>
-    );
-  }
 
   return (
     <Card className="flex flex-col gap-6">
@@ -213,12 +202,12 @@ export function MappingStep({
       )}
 
       <div className="flex items-center justify-between">
-        <Button variant="ghost" type="button" onClick={onBack} disabled={submitting}>
+        <Button variant="ghost" type="button" onClick={onBack}>
           Back
         </Button>
         <Button
           type="button"
-          disabled={!canConfirm || submitting}
+          disabled={!canConfirm}
           onClick={() =>
             onConfirm(
               validRows.map((r) => ({
@@ -231,9 +220,7 @@ export function MappingStep({
             )
           }
         >
-          {submitting
-            ? "Importing…"
-            : `Import ${validRows.length} transaction${validRows.length === 1 ? "" : "s"}`}
+          Review {validRows.length} transaction{validRows.length === 1 ? "" : "s"}
         </Button>
       </div>
     </Card>

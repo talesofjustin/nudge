@@ -1,29 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import {
-  TransactionsFilters,
-  type FiltersState,
-} from "@/components/transactions/transactions-filters";
+import { Button } from "@/components/ui/button";
+import { TransactionsFilters } from "@/components/transactions/transactions-filters";
 import { FilterSummary } from "@/components/transactions/filter-summary";
+import { PeriodBanner } from "@/components/transactions/period-banner";
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import type { CategoryInfo } from "@/components/transactions/category-badge";
-import { FilterIcon } from "@/components/icons/dashboard-icons";
-import { normalizeRecipient } from "@/lib/known-recipients";
 import {
   getFilteredTransactions,
   updateTransaction,
   createCategory,
-  setRecipientOwnAccount,
+  deleteTransactions,
   type TransactionRowData,
 } from "@/app/(app)/transactions/actions";
-import { getPresetRange } from "@/lib/date-presets";
+import { filtersToSearchParams, type FiltersState } from "@/lib/transaction-filters";
 
 const COLUMNS = [
+  "",
   "Date",
   "Recipient",
-  "Description",
+  "Note",
   "Amount",
   "Category",
   "Account",
@@ -36,57 +35,49 @@ export function TransactionsView({
   spaces,
   categories: initialCategories,
   initialRows,
+  initialFilters,
+  paydayAnchorDay,
 }: {
   accounts: { id: string; name: string }[];
   spaces: { id: string; name: string }[];
   categories: CategoryInfo[];
   initialRows: TransactionRowData[];
+  initialFilters: FiltersState;
+  paydayAnchorDay: number | null;
 }) {
-  const monthRange = useMemo(() => getPresetRange("month"), []);
+  const router = useRouter();
+  const pathname = usePathname();
 
-  const [filters, setFilters] = useState<FiltersState>({
-    spaceId: null,
-    accountId: null,
-    categoryIds: [],
-    amountMin: "",
-    amountMax: "",
-    dateFrom: monthRange.from,
-    dateTo: monthRange.to,
-  });
-  const [showFilters, setShowFilters] = useState(false);
-
+  const [filters, setFilters] = useState<FiltersState>(initialFilters);
   const [categories, setCategories] = useState<CategoryInfo[]>(initialCategories);
   const [rows, setRows] = useState<TransactionRowData[]>(initialRows);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const isFirstRender = useRef(true);
 
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
   const spacesById = useMemo(() => new Map(spaces.map((s) => [s.id, s.name])), [spaces]);
   const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
-  const hasActiveFilters =
-    filters.spaceId !== null ||
-    filters.accountId !== null ||
-    filters.categoryIds.length > 0 ||
-    filters.amountMin !== "" ||
-    filters.amountMax !== "" ||
-    filters.dateFrom !== monthRange.from ||
-    filters.dateTo !== monthRange.to;
-
   const uncategorizedCount = rows.filter((r) => !r.categoryId && !r.isTransfer).length;
 
-  // Debounced refetch whenever any filter changes (skips the first render —
-  // the server already fetched the default "this month" view).
+  // Debounced refetch + URL sync whenever any filter changes (skips the
+  // first render — the server already fetched matching the initial URL).
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
 
+    router.replace(`${pathname}?${filtersToSearchParams(filters).toString()}`, { scroll: false });
+
     const timeout = setTimeout(async () => {
       setLoading(true);
       setError(null);
+      setSelectedIds(new Set());
 
       const min = filters.amountMin.trim() ? Number(filters.amountMin) : null;
       const max = filters.amountMax.trim() ? Number(filters.amountMax) : null;
@@ -99,6 +90,7 @@ export function TransactionsView({
         amountMax: max !== null && !Number.isNaN(max) ? max : null,
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
+        recipient: filters.recipient,
       });
 
       setLoading(false);
@@ -110,10 +102,15 @@ export function TransactionsView({
     }, 400);
 
     return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
   function handleFilterChange(patch: Partial<FiltersState>) {
     setFilters((prev) => ({ ...prev, ...patch }));
+  }
+
+  function handleFilterByRecipient(recipient: string) {
+    handleFilterChange({ recipient });
   }
 
   function handleUpdate(
@@ -122,18 +119,6 @@ export function TransactionsView({
   ) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...toRowPatch(updates) } : r)));
     void updateTransaction(id, updates);
-  }
-
-  function handleToggleTransfer(recipient: string, isOwnAccount: boolean) {
-    const normalized = normalizeRecipient(recipient);
-    setRows((prev) =>
-      prev.map((r) =>
-        r.recipient && normalizeRecipient(r.recipient) === normalized
-          ? { ...r, isTransfer: isOwnAccount }
-          : r,
-      ),
-    );
-    void setRecipientOwnAccount(recipient, isOwnAccount);
   }
 
   async function handleCreateCategory(
@@ -148,37 +133,47 @@ export function TransactionsView({
     return created;
   }
 
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === rows.length ? new Set() : new Set(rows.map((r) => r.id)),
+    );
+  }
+
+  async function handleBulkDelete() {
+    setDeleting(true);
+    const ids = Array.from(selectedIds);
+    const res = await deleteTransactions(ids);
+    setDeleting(false);
+    setConfirmingDelete(false);
+    if (res.success) {
+      setRows((prev) => prev.filter((r) => !selectedIds.has(r.id)));
+      setSelectedIds(new Set());
+    } else {
+      setError(res.error ?? "Could not delete the selected transactions.");
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowFilters((v) => !v)}
-          className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium transition-colors ${
-            showFilters
-              ? "bg-ink-solid text-white"
-              : "border border-border bg-surface text-muted hover:text-foreground"
-          }`}
-        >
-          <FilterIcon className="h-4 w-4" />
-          Filters
-          {hasActiveFilters && (
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${showFilters ? "bg-white" : "bg-violet-400"}`}
-            />
-          )}
-        </button>
-      </div>
+      <PeriodBanner period={filters.period} dateFrom={filters.dateFrom} dateTo={filters.dateTo} />
 
-      {showFilters && (
-        <TransactionsFilters
-          accounts={accounts}
-          spaces={spaces}
-          categories={categories}
-          filters={filters}
-          onChange={handleFilterChange}
-        />
-      )}
+      <TransactionsFilters
+        accounts={accounts}
+        spaces={spaces}
+        categories={categories}
+        filters={filters}
+        paydayAnchorDay={paydayAnchorDay}
+        onChange={handleFilterChange}
+      />
 
       <FilterSummary rows={rows} categoriesById={categoriesById} />
 
@@ -193,6 +188,43 @@ export function TransactionsView({
         </Card>
       )}
 
+      {selectedIds.size > 0 && (
+        <Card className="flex items-center justify-between py-3">
+          <p className="text-[13px] font-medium text-foreground">
+            {selectedIds.size} transaction{selectedIds.size === 1 ? "" : "s"} selected
+          </p>
+          {confirmingDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] text-muted">Delete these permanently?</span>
+              <Button
+                variant="secondary"
+                className="h-8 px-3 text-[13px]"
+                onClick={() => setConfirmingDelete(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-8 border-danger px-3 text-[13px] text-danger hover:bg-danger/10"
+                onClick={handleBulkDelete}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting…" : "Confirm delete"}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="secondary"
+              className="h-8 px-3 text-[13px]"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              Delete selected
+            </Button>
+          )}
+        </Card>
+      )}
+
       <Card className="p-0">
         {error && (
           <p className="px-6 py-4 text-sm text-danger" role="alert">
@@ -200,9 +232,7 @@ export function TransactionsView({
           </p>
         )}
 
-        {loading && (
-          <p className="px-6 py-3 text-[13px] text-muted">Updating…</p>
-        )}
+        {loading && <p className="px-6 py-3 text-[13px] text-muted">Updating…</p>}
 
         {rows.length === 0 && !loading ? (
           <p className="px-6 py-12 text-center text-[13px] text-muted">
@@ -213,7 +243,16 @@ export function TransactionsView({
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-border">
-                  {COLUMNS.map((col) => (
+                  <th className="w-10 px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={rows.length > 0 && selectedIds.size === rows.length}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 rounded border-border accent-[var(--violet-600)]"
+                      aria-label="Select all transactions"
+                    />
+                  </th>
+                  {COLUMNS.slice(1).map((col) => (
                     <th
                       key={col}
                       className="whitespace-nowrap px-3 py-3 text-[12px] font-medium text-muted"
@@ -231,8 +270,10 @@ export function TransactionsView({
                     accountName={accountsById.get(row.accountId) ?? "Unknown account"}
                     spaceName={row.spaceId ? (spacesById.get(row.spaceId) ?? null) : null}
                     categories={categories}
+                    selected={selectedIds.has(row.id)}
+                    onToggleSelect={toggleSelect}
                     onUpdate={handleUpdate}
-                    onToggleTransfer={handleToggleTransfer}
+                    onFilterByRecipient={handleFilterByRecipient}
                     onCreateCategory={handleCreateCategory}
                   />
                 ))}

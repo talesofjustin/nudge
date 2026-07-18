@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
+import { Card } from "@/components/ui/card";
 import { StepIndicator, type Step } from "@/components/import/step-indicator";
 import { UploadStep } from "@/components/import/upload-step";
 import { AccountSpaceStep } from "@/components/import/account-space-step";
 import { MappingStep } from "@/components/import/mapping-step";
+import { ReviewStep } from "@/components/import/review-step";
 import { DoneStep } from "@/components/import/done-step";
+import { ProcessingIndicator } from "@/components/import/processing-indicator";
 import { guessColumnMapping, type ColumnMapping, type ParsedRow } from "@/lib/csv";
 import {
   importTransactions,
@@ -55,6 +58,9 @@ export function ImportWizard({
       : { kind: "new", name: "", type: "bank" },
   );
   const [spaceChoice, setSpaceChoice] = useState<SpaceChoice>({ kind: "none" });
+
+  const [pendingRows, setPendingRows] = useState<ImportRow[]>([]);
+  const [pendingSkippedCount, setPendingSkippedCount] = useState(0);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -109,20 +115,27 @@ export function ImportWizard({
     });
   }
 
-  async function handleConfirm(validRows: ImportRow[], skippedCount: number) {
+  function handleMappingConfirm(validRows: ImportRow[], skippedCount: number) {
+    setPendingRows(validRows);
+    setPendingSkippedCount(skippedCount);
+    setStep("review");
+  }
+
+  async function handleFinalConfirm() {
     setSubmitting(true);
     setSubmitError(null);
     const res = await importTransactions(
       accountChoice,
       spaceChoice,
-      validRows,
+      pendingRows,
       fileName,
-      skippedCount,
+      pendingSkippedCount,
     );
     setSubmitting(false);
 
     if (!res.success) {
       setSubmitError(res.error);
+      setStep("mapping");
       return;
     }
 
@@ -144,59 +157,75 @@ export function ImportWizard({
     setHeaders([]);
     setMapping(EMPTY_MAPPING);
     setFileName(null);
+    setPendingRows([]);
+    setPendingSkippedCount(0);
     setSubmitError(null);
     setResult(null);
     setStep("upload");
   }
 
   return (
-    <div className="flex gap-8">
+    <div className="flex flex-col gap-6">
       <StepIndicator step={step} />
 
-      <div className="min-w-0 flex-1">
-        {step === "upload" && (
-          <UploadStep onFile={handleFile} reading={reading} error={parseError} />
-        )}
+      {submitting ? (
+        <Card>
+          <ProcessingIndicator variant="importing" />
+        </Card>
+      ) : (
+        <>
+          {step === "upload" && (
+            <UploadStep onFile={handleFile} reading={reading} error={parseError} />
+          )}
 
-        {step === "account" && (
-          <AccountSpaceStep
-            accounts={accounts}
-            spaces={spaces}
-            accountChoice={accountChoice}
-            spaceChoice={spaceChoice}
-            onChangeAccount={setAccountChoice}
-            onChangeSpace={setSpaceChoice}
-            onBack={() => setStep("upload")}
-            onNext={() => setStep("mapping")}
-          />
-        )}
+          {step === "account" && (
+            <AccountSpaceStep
+              accounts={accounts}
+              spaces={spaces}
+              accountChoice={accountChoice}
+              spaceChoice={spaceChoice}
+              onChangeAccount={setAccountChoice}
+              onChangeSpace={setSpaceChoice}
+              onBack={() => setStep("upload")}
+              onNext={() => setStep("mapping")}
+            />
+          )}
 
-        {step === "mapping" && (
-          <MappingStep
-            headers={headers}
-            rows={rows}
-            mapping={mapping}
-            onChangeMapping={setMapping}
-            timezone={timezone}
-            defaultDecimalSeparator={settings.decimalSeparator}
-            onBack={() => setStep("account")}
-            onConfirm={handleConfirm}
-            submitting={submitting}
-            submitError={submitError}
-          />
-        )}
+          {step === "mapping" && (
+            <MappingStep
+              headers={headers}
+              rows={rows}
+              mapping={mapping}
+              onChangeMapping={setMapping}
+              timezone={timezone}
+              defaultDecimalSeparator={settings.decimalSeparator}
+              onBack={() => setStep("account")}
+              onConfirm={handleMappingConfirm}
+              submitError={submitError}
+            />
+          )}
 
-        {step === "done" && result && (
-          <DoneStep
-            count={result.count}
-            accountName={result.accountName}
-            skippedCount={result.skippedCount}
-            statementStartDate={result.statementStartDate}
-            statementEndDate={result.statementEndDate}
-            onImportAnother={handleImportAnother}
-          />
-        )}
-      </div>
+          {step === "review" && (
+            <ReviewStep
+              rows={pendingRows}
+              accountChoice={accountChoice}
+              onBack={() => setStep("mapping")}
+              onConfirm={handleFinalConfirm}
+            />
+          )}
+
+          {step === "done" && result && (
+            <DoneStep
+              count={result.count}
+              accountName={result.accountName}
+              skippedCount={result.skippedCount}
+              statementStartDate={result.statementStartDate}
+              statementEndDate={result.statementEndDate}
+              onImportAnother={handleImportAnother}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }

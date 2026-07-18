@@ -36,24 +36,20 @@ export function ImportHistory({ imports }: { imports: ImportHistoryEntry[] }) {
           return (
             <div key={imp.id} className="flex items-center justify-between gap-4 py-3.5">
               <div>
-                <p className="text-[14px] font-medium text-foreground">
-                  {imp.filename || `Import — ${formatDate(imp.createdAt)}`}
+                <p className="text-[14.5px] font-semibold text-foreground">
+                  {statementPeriod ?? `Import — ${formatDate(imp.createdAt)}`}
                 </p>
-                <p className="mt-0.5 text-[12.5px] text-muted">
+                <p className="mt-0.5 text-[13px] text-muted">
                   {imp.accountName}
                   {imp.spaceName && ` · ${imp.spaceName}`}
-                  {statementPeriod && ` · ${statementPeriod}`} · imported {formatDate(imp.createdAt)}
+                </p>
+                <p className="mt-1 text-[11.5px] text-muted-2">
+                  {imp.rowCount} row{imp.rowCount === 1 ? "" : "s"}
+                  {imp.skippedCount > 0 &&
+                    ` (${imp.skippedCount} skipped)`} · imported {formatDate(imp.createdAt)}
+                  {imp.filename && ` · ${imp.filename}`}
                 </p>
               </div>
-              <span className="whitespace-nowrap text-right text-[13px] text-muted">
-                {imp.rowCount} row{imp.rowCount === 1 ? "" : "s"}
-                {imp.skippedCount > 0 && (
-                  <>
-                    <br />
-                    <span className="text-[12px] text-muted-2">{imp.skippedCount} skipped</span>
-                  </>
-                )}
-              </span>
             </div>
           );
         })}

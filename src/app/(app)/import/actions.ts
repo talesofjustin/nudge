@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import type { AccountType } from "@/lib/supabase/database.types";
+import { IMPORT_CHECKS, type ImportFlag } from "@/lib/import-checks";
 
 export type ImportRow = {
   date: string;
@@ -9,6 +10,33 @@ export type ImportRow = {
   recipient: string | null;
   description: string | null;
 };
+
+// Resolves the account choice to a real (existing) account id without
+// creating anything yet — used by the review step, which runs before the
+// user has committed to the import. A brand-new account has no history to
+// check against, so checks simply see `accountId: null` in that case.
+async function resolveExistingAccountId(account: AccountChoice): Promise<string | null> {
+  if (account.kind === "existing") return account.id;
+  return null;
+}
+
+export async function runImportChecks(
+  account: AccountChoice,
+  rows: ImportRow[],
+): Promise<{ flags: ImportFlag[] }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { flags: [] };
+
+  const accountId = await resolveExistingAccountId(account);
+  const ctx = { rows, accountId, userId: user.id };
+
+  const results = await Promise.all(IMPORT_CHECKS.map((check) => check.run(ctx)));
+  return { flags: results.flat() };
+}
 
 export type AccountChoice =
   | { kind: "existing"; id: string }

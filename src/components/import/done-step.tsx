@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import confetti from "canvas-confetti";
 import { Card } from "@/components/ui/card";
@@ -24,8 +24,18 @@ export function DoneStep({
   statementEndDate: string | null;
   onImportAnother: () => void;
 }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
   useEffect(() => {
-    confetti({
+    if (!canvasRef.current) return;
+    // Scoped confetti instance bound to a canvas sized to this card (via
+    // `resize: true`) — particles are drawn and clipped within the card's
+    // own bounds instead of bursting across the full viewport.
+    const scopedConfetti = confetti.create(canvasRef.current, {
+      resize: true,
+      useWorker: false,
+    });
+    scopedConfetti({
       particleCount: 120,
       spread: 80,
       startVelocity: 45,
@@ -37,7 +47,8 @@ export function DoneStep({
   const statementPeriod = formatStatementPeriod(statementStartDate, statementEndDate);
 
   return (
-    <Card className="flex flex-col items-center gap-3 py-16 text-center">
+    <Card className="relative flex flex-col items-center gap-3 overflow-hidden py-16 text-center">
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
       <IconChip tone="mint" size={48}>
         <CheckIcon className="h-5 w-5" />
       </IconChip>

@@ -1,41 +1,51 @@
 "use client";
 
-import { Card } from "@/components/ui/card";
+import type { ReactNode } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { FilterChip } from "@/components/ui/pill";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { CategoryBadge, type CategoryInfo } from "@/components/transactions/category-badge";
+import { CheckIcon } from "@/components/icons/dashboard-icons";
 import { getPresetRange, type DatePreset } from "@/lib/date-presets";
+import type { FiltersState } from "@/lib/transaction-filters";
 
 const ALL = "__all__";
 
-export type FiltersState = {
-  spaceId: string | null;
-  accountId: string | null;
-  categoryIds: string[];
-  amountMin: string;
-  amountMax: string;
-  dateFrom: string | null;
-  dateTo: string | null;
-};
-
-const DATE_PRESETS: { key: DatePreset; label: string }[] = [
-  { key: "week", label: "This week" },
+const PERIOD_PRESETS: { key: DatePreset; label: string }[] = [
   { key: "month", label: "This month" },
   { key: "quarter", label: "This quarter" },
-  { key: "all", label: "All time" },
+  { key: "year", label: "This year" },
 ];
 
-// The active preset (if any) is derived from the current dateFrom/dateTo
-// rather than tracked as separate state — a custom date input change and a
-// preset click both just set dateFrom/dateTo, so there's one source of
-// truth and no risk of the two getting out of sync.
-function getActivePreset(dateFrom: string | null, dateTo: string | null): DatePreset | null {
-  for (const preset of ["week", "month", "quarter", "all"] as DatePreset[]) {
-    const range = getPresetRange(preset);
-    if (range.from === dateFrom && range.to === dateTo) return preset;
-  }
-  return null;
+function FilterPopoverChip({
+  label,
+  active,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-colors ${
+            active
+              ? "bg-ink-solid text-white"
+              : "border border-border bg-surface text-muted hover:text-foreground"
+          }`}
+        >
+          {label}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64" align="start">
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function TransactionsFilters({
@@ -43,15 +53,23 @@ export function TransactionsFilters({
   spaces,
   categories,
   filters,
+  paydayAnchorDay,
   onChange,
 }: {
   accounts: { id: string; name: string }[];
   spaces: { id: string; name: string }[];
   categories: CategoryInfo[];
   filters: FiltersState;
+  paydayAnchorDay: number | null;
   onChange: (patch: Partial<FiltersState>) => void;
 }) {
-  const activePreset = getActivePreset(filters.dateFrom, filters.dateTo);
+  const spaceName = filters.spaceId ? spaces.find((s) => s.id === filters.spaceId)?.name : null;
+  const accountName = filters.accountId
+    ? accounts.find((a) => a.id === filters.accountId)?.name
+    : null;
+  const hasAmount = filters.amountMin !== "" || filters.amountMax !== "";
+  const categoryLabel =
+    filters.categoryIds.length > 0 ? `Category (${filters.categoryIds.length})` : "Category";
 
   function toggleCategory(id: string) {
     const next = filters.categoryIds.includes(id)
@@ -61,112 +79,135 @@ export function TransactionsFilters({
   }
 
   return (
-    <Card className="flex flex-col gap-5">
-      <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium text-muted">Date range</span>
-        <div className="flex flex-wrap items-center gap-2">
-          {DATE_PRESETS.map((p) => (
-            <FilterChip
-              key={p.key}
-              active={activePreset === p.key}
-              onClick={() => {
-                const range = getPresetRange(p.key);
-                onChange({ dateFrom: range.from, dateTo: range.to });
-              }}
-            >
-              {p.label}
-            </FilterChip>
-          ))}
-          <span className="mx-1 text-[13px] text-muted-2">or custom:</span>
-          <input
-            type="date"
-            value={filters.dateFrom ?? ""}
-            onChange={(e) => onChange({ dateFrom: e.target.value || null })}
-            className="h-8 rounded-lg border border-border bg-canvas px-2 text-[13px] text-foreground outline-none focus:border-violet-400"
-          />
-          <span className="text-[13px] text-muted-2">to</span>
-          <input
-            type="date"
-            value={filters.dateTo ?? ""}
-            onChange={(e) => onChange({ dateTo: e.target.value || null })}
-            className="h-8 rounded-lg border border-border bg-canvas px-2 text-[13px] text-foreground outline-none focus:border-violet-400"
-          />
-        </div>
-      </div>
+    <div className="flex flex-wrap items-center gap-2">
+      {PERIOD_PRESETS.map((p) => (
+        <button
+          key={p.key}
+          type="button"
+          onClick={() => {
+            const range = getPresetRange(p.key, paydayAnchorDay);
+            onChange({ period: p.key, dateFrom: range.from, dateTo: range.to });
+          }}
+          className={`inline-flex h-9 items-center rounded-full px-3.5 text-[13px] font-medium transition-colors ${
+            filters.period === p.key
+              ? "bg-ink-solid text-white"
+              : "border border-border bg-surface text-muted hover:text-foreground"
+          }`}
+        >
+          {p.label}
+        </button>
+      ))}
 
-      <div className="flex flex-wrap gap-4">
-        {spaces.length > 0 && (
-          <div className="w-44">
-            <Select
-              label="Space"
-              value={filters.spaceId ?? ALL}
-              onValueChange={(v) => onChange({ spaceId: v === ALL ? null : v })}
-            >
-              <SelectItem value={ALL}>All spaces</SelectItem>
-              {spaces.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </Select>
-          </div>
-        )}
+      <DateRangePicker
+        from={filters.dateFrom}
+        to={filters.dateTo}
+        active={filters.period === "custom"}
+        label={filters.period === "custom" ? `${filters.dateFrom} – ${filters.dateTo}` : "Custom range"}
+        onChange={(from, to) => onChange({ period: "custom", dateFrom: from, dateTo: to })}
+      />
 
-        <div className="w-48">
+      <span className="mx-1 h-5 w-px bg-border" />
+
+      {spaces.length > 0 && (
+        <FilterPopoverChip label={spaceName ? `Space: ${spaceName}` : "Space"} active={!!filters.spaceId}>
           <Select
-            label="Account"
-            value={filters.accountId ?? ALL}
-            onValueChange={(v) => onChange({ accountId: v === ALL ? null : v })}
+            value={filters.spaceId ?? ALL}
+            onValueChange={(v) => onChange({ spaceId: v === ALL ? null : v })}
           >
-            <SelectItem value={ALL}>All accounts</SelectItem>
-            {accounts.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.name}
+            <SelectItem value={ALL}>All spaces</SelectItem>
+            {spaces.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name}
               </SelectItem>
             ))}
           </Select>
-        </div>
+        </FilterPopoverChip>
+      )}
 
-        <div className="flex items-end gap-2">
-          <Input
-            label="Min amount"
-            type="number"
-            placeholder="0.00"
-            value={filters.amountMin}
-            onChange={(e) => onChange({ amountMin: e.target.value })}
-            className="w-28"
-          />
-          <Input
-            label="Max amount"
-            type="number"
-            placeholder="0.00"
-            value={filters.amountMax}
-            onChange={(e) => onChange({ amountMax: e.target.value })}
-            className="w-28"
-          />
-        </div>
-      </div>
+      <FilterPopoverChip label={accountName ? `Account: ${accountName}` : "Account"} active={!!filters.accountId}>
+        <Select
+          value={filters.accountId ?? ALL}
+          onValueChange={(v) => onChange({ accountId: v === ALL ? null : v })}
+        >
+          <SelectItem value={ALL}>All accounts</SelectItem>
+          {accounts.map((a) => (
+            <SelectItem key={a.id} value={a.id}>
+              {a.name}
+            </SelectItem>
+          ))}
+        </Select>
+      </FilterPopoverChip>
 
       {categories.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <span className="text-[13px] font-medium text-muted">Category</span>
-          <div className="flex flex-wrap gap-2">
+        <FilterPopoverChip label={categoryLabel} active={filters.categoryIds.length > 0}>
+          <div className="flex max-h-72 flex-col gap-1 overflow-y-auto">
             {categories.map((c) => {
-              const active = filters.categoryIds.includes(c.id);
+              const checked = filters.categoryIds.includes(c.id);
               return (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => toggleCategory(c.id)}
-                  className={`rounded-full transition-opacity ${active ? "" : "opacity-40 hover:opacity-70"}`}
+                  className="flex items-center justify-between rounded-xl px-2 py-1.5 text-left hover:bg-canvas"
                 >
                   <CategoryBadge category={c} />
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      checked ? "border-violet-600 bg-violet-600 text-white" : "border-border"
+                    }`}
+                  >
+                    {checked && <CheckIcon className="h-3 w-3" />}
+                  </span>
                 </button>
               );
             })}
           </div>
-        </div>
+        </FilterPopoverChip>
       )}
-    </Card>
+
+      <FilterPopoverChip
+        label={
+          hasAmount
+            ? `Amount: ${filters.amountMin || "0"}–${filters.amountMax || "∞"}`
+            : "Amount"
+        }
+        active={hasAmount}
+      >
+        <div className="flex items-end gap-2">
+          <Input
+            label="Min"
+            type="number"
+            placeholder="0.00"
+            value={filters.amountMin}
+            onChange={(e) => onChange({ amountMin: e.target.value })}
+            className="w-full"
+          />
+          <Input
+            label="Max"
+            type="number"
+            placeholder="0.00"
+            value={filters.amountMax}
+            onChange={(e) => onChange({ amountMax: e.target.value })}
+            className="w-full"
+          />
+        </div>
+      </FilterPopoverChip>
+
+      {filters.recipient && (
+        <>
+          <span className="mx-1 h-5 w-px bg-border" />
+          <FilterPopoverChip label={`Recipient: ${filters.recipient}`} active>
+            <p className="mb-2 text-[13px] text-muted">Filtering by recipient.</p>
+            <button
+              type="button"
+              onClick={() => onChange({ recipient: null })}
+              className="text-[13px] font-medium text-violet-600 hover:underline"
+            >
+              Clear recipient filter
+            </button>
+          </FilterPopoverChip>
+        </>
+      )}
+    </div>
   );
 }

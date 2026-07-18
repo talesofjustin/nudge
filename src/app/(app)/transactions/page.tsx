@@ -1,59 +1,48 @@
 import { createClient } from "@/lib/supabase/server";
 import { getPresetRange } from "@/lib/date-presets";
-import { buildOwnAccountSet, isTransferRecipient } from "@/lib/known-recipients";
+import { getUserSettings } from "@/lib/user-settings";
+import { parseFiltersFromParams, type SearchParamsInput } from "@/lib/transaction-filters";
+import { getFilteredTransactions } from "@/app/(app)/transactions/actions";
 import { TransactionsView } from "@/components/transactions/transactions-view";
 
-export default async function TransactionsPage() {
+export default async function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParamsInput>;
+}) {
   const supabase = await createClient();
-  const { from, to } = getPresetRange("month");
+  const [params, settings] = await Promise.all([searchParams, getUserSettings()]);
 
-  const [
-    { data: accounts },
-    { data: spaces },
-    { data: categories },
-    { data: transactions },
-    { data: knownRecipients },
-  ] = await Promise.all([
-    supabase
-      .from("accounts")
-      .select("id, name")
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("spaces")
-      .select("id, name")
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("categories")
-      .select("id, name, color, icon")
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("transactions")
-      .select(
-        "id, account_id, category_id, space_id, amount, recipient, description, raw_description, occurred_at, is_recurring",
-      )
-      .gte("occurred_at", from ?? undefined)
-      .lte("occurred_at", to ?? undefined)
-      .order("occurred_at", { ascending: false }),
-    supabase.from("known_recipients").select("recipient, is_own_account"),
-  ]);
+  const defaultRange = getPresetRange("month", settings.paydayAnchorDay);
+  const filters = parseFiltersFromParams(params, defaultRange);
 
-  const ownAccountRecipients = buildOwnAccountSet(
-    (knownRecipients ?? []).map((r) => ({ recipient: r.recipient, isOwnAccount: r.is_own_account })),
-  );
+  const [{ data: accounts }, { data: spaces }, { data: categories }, transactionsResult] =
+    await Promise.all([
+      supabase
+        .from("accounts")
+        .select("id, name")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("spaces")
+        .select("id, name")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("categories")
+        .select("id, name, color, icon")
+        .order("created_at", { ascending: true }),
+      getFilteredTransactions({
+        spaceId: filters.spaceId,
+        accountId: filters.accountId,
+        categoryIds: filters.categoryIds,
+        amountMin: filters.amountMin.trim() ? Number(filters.amountMin) : null,
+        amountMax: filters.amountMax.trim() ? Number(filters.amountMax) : null,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        recipient: filters.recipient,
+      }),
+    ]);
 
-  const initialRows = (transactions ?? []).map((row) => ({
-    id: row.id,
-    accountId: row.account_id,
-    categoryId: row.category_id,
-    spaceId: row.space_id,
-    amount: row.amount,
-    recipient: row.recipient,
-    description: row.description,
-    rawDescription: row.raw_description,
-    occurredAt: row.occurred_at,
-    isRecurring: row.is_recurring,
-    isTransfer: isTransferRecipient(row.recipient, ownAccountRecipients),
-  }));
+  const initialRows = transactionsResult.success ? transactionsResult.rows : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,6 +58,8 @@ export default async function TransactionsPage() {
         spaces={spaces ?? []}
         categories={categories ?? []}
         initialRows={initialRows}
+        initialFilters={filters}
+        paydayAnchorDay={settings.paydayAnchorDay}
       />
     </div>
   );

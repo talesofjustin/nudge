@@ -6,6 +6,7 @@ import { IconChip } from "@/components/ui/icon-chip";
 const MESSAGE_SETS = {
   reading: ["Reading your file…", "Detecting columns…", "Almost ready…"],
   importing: ["Importing your transactions…", "Almost done…"],
+  reviewing: ["Checking your import…"],
 } as const;
 
 export function ProcessingIndicator({ variant }: { variant: keyof typeof MESSAGE_SETS }) {

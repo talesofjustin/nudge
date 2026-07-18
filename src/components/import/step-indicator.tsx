@@ -1,11 +1,12 @@
 import { CheckIcon } from "@/components/icons/dashboard-icons";
 
-export type Step = "upload" | "account" | "mapping" | "done";
+export type Step = "upload" | "account" | "mapping" | "review" | "done";
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "upload", label: "Upload" },
-  { key: "account", label: "Account & space" },
+  { key: "account", label: "Account" },
   { key: "mapping", label: "Map columns" },
+  { key: "review", label: "Review" },
   { key: "done", label: "Done" },
 ];
 
@@ -13,16 +14,16 @@ export function StepIndicator({ step }: { step: Step }) {
   const currentIndex = STEPS.findIndex((s) => s.key === step);
 
   return (
-    <div className="hidden w-48 shrink-0 flex-col sm:flex">
+    <div className="flex items-center">
       {STEPS.map((s, i) => {
         const isActive = i === currentIndex;
         const isComplete = i < currentIndex;
         const isLast = i === STEPS.length - 1;
         return (
-          <div key={s.key} className="flex gap-3">
-            <div className="flex flex-col items-center">
+          <div key={s.key} className={`flex items-center ${isLast ? "" : "flex-1"}`}>
+            <div className="flex shrink-0 items-center gap-2">
               <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold transition-colors ${
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition-colors ${
                   isComplete
                     ? "gradient-accent text-white"
                     : isActive
@@ -30,29 +31,21 @@ export function StepIndicator({ step }: { step: Step }) {
                       : "border border-border bg-surface text-muted"
                 }`}
               >
-                {isComplete ? <CheckIcon className="h-4 w-4" /> : i + 1}
+                {isComplete ? <CheckIcon className="h-3 w-3" /> : i + 1}
               </div>
-              {!isLast && (
-                <div
-                  className={`w-px flex-1 ${isComplete ? "bg-violet-400" : "bg-border"}`}
-                  style={{ minHeight: 28 }}
-                />
-              )}
-            </div>
-            <div className={isLast ? "pb-0" : "pb-7"}>
-              <p
-                className={`pt-1 text-[13px] font-medium ${
+              <span
+                className={`whitespace-nowrap text-[12.5px] font-medium ${
                   isActive || isComplete ? "text-foreground" : "text-muted"
                 }`}
               >
                 {s.label}
-              </p>
-              {isActive && (
-                <p className="mt-0.5 text-[11px] text-muted-2">
-                  Step {i + 1} of {STEPS.length}
-                </p>
-              )}
+              </span>
             </div>
+            {!isLast && (
+              <div
+                className={`mx-3 h-px flex-1 ${isComplete ? "bg-violet-400" : "bg-border"}`}
+              />
+            )}
           </div>
         );
       })}

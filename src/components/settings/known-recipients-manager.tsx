@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { TransferIcon } from "@/components/icons/dashboard-icons";
 import {
-  setRecipientOwnAccount,
+  unflagKnownRecipient,
   type KnownRecipientData,
 } from "@/app/(app)/transactions/actions";
 
@@ -17,7 +17,7 @@ export function KnownRecipientsManager({
 
   function handleUnflag(recipient: string) {
     setRecipients((prev) => prev.filter((r) => r.recipient !== recipient));
-    void setRecipientOwnAccount(recipient, false);
+    void unflagKnownRecipient(recipient);
   }
 
   return (
@@ -32,7 +32,8 @@ export function KnownRecipientsManager({
 
       {recipients.length === 0 ? (
         <p className="text-[13px] text-muted-2">
-          None yet — mark a recipient from the Transactions page.
+          None yet — we&apos;ll ask during import if we spot a recipient with frequent
+          back-and-forth transfers.
         </p>
       ) : (
         <ul className="flex flex-col gap-1">
