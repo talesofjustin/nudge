@@ -4,6 +4,7 @@ import { useRef, useState, type DragEvent } from "react";
 import { Card } from "@/components/ui/card";
 import { IconChip } from "@/components/ui/icon-chip";
 import { UploadIcon } from "@/components/icons/dashboard-icons";
+import { ProcessingIndicator } from "@/components/import/processing-indicator";
 
 export function UploadStep({
   onFile,
@@ -24,6 +25,14 @@ export function UploadStep({
     if (file) onFile(file);
   }
 
+  if (reading) {
+    return (
+      <Card>
+        <ProcessingIndicator variant="reading" />
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <div
@@ -42,18 +51,10 @@ export function UploadStep({
           <UploadIcon className="h-5 w-5" />
         </IconChip>
 
-        {reading ? (
-          <p className="text-[15px] font-medium text-foreground">Reading file…</p>
-        ) : (
-          <>
-            <p className="text-[15px] font-medium text-foreground">
-              Drag and drop your CSV here, or click to browse
-            </p>
-            <p className="text-[13px] text-muted">
-              Exported from your bank or card statement
-            </p>
-          </>
-        )}
+        <p className="text-[15px] font-medium text-foreground">
+          Drag and drop your CSV here, or click to browse
+        </p>
+        <p className="text-[13px] text-muted">Exported from your bank or card statement</p>
 
         <input
           ref={inputRef}

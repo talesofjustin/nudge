@@ -1,10 +1,12 @@
 // Hand-written to match supabase/migrations/20260714160602_initial_schema.sql,
 // 20260714173442_add_transactions_recipient.sql,
-// 20260714215055_user_settings.sql, and 20260715110614_imports.sql. Shaped
-// the way `supabase gen types typescript` would produce it, so running that
-// command later (once the migrations have been applied) is a drop-in
-// replacement for this file. `Relationships` is left empty here (no typed
-// nested-select embedding) — real codegen will populate it from the FKs.
+// 20260714215055_user_settings.sql, 20260715110614_imports.sql,
+// 20260718161433_known_recipients.sql, 20260718161434_extend_imports.sql, and
+// 20260718161435_transactions_raw_description.sql. Shaped the way
+// `supabase gen types typescript` would produce it, so running that command
+// later (once the migrations have been applied) is a drop-in replacement for
+// this file. `Relationships` is left empty here (no typed nested-select
+// embedding) — real codegen will populate it from the FKs.
 
 export type AccountType = "bank" | "paypal" | "credit_card" | "cash" | "other";
 export type DecimalSeparator = "period" | "comma";
@@ -93,7 +95,8 @@ export type Database = {
           space_id: string | null;
           amount: number;
           recipient: string | null;
-          description: string;
+          description: string | null;
+          raw_description: string | null;
           occurred_at: string;
           is_recurring: boolean;
           recurring_group_id: string | null;
@@ -107,7 +110,8 @@ export type Database = {
           space_id?: string | null;
           amount: number;
           recipient?: string | null;
-          description: string;
+          description?: string | null;
+          raw_description?: string | null;
           occurred_at?: string;
           is_recurring?: boolean;
           recurring_group_id?: string | null;
@@ -121,7 +125,8 @@ export type Database = {
           space_id?: string | null;
           amount?: number;
           recipient?: string | null;
-          description?: string;
+          description?: string | null;
+          raw_description?: string | null;
           occurred_at?: string;
           is_recurring?: boolean;
           recurring_group_id?: string | null;
@@ -185,24 +190,60 @@ export type Database = {
           id: string;
           user_id: string;
           account_id: string;
+          space_id: string | null;
           filename: string | null;
           row_count: number;
+          skipped_count: number;
+          statement_start_date: string | null;
+          statement_end_date: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           user_id: string;
           account_id: string;
+          space_id?: string | null;
           filename?: string | null;
           row_count: number;
+          skipped_count?: number;
+          statement_start_date?: string | null;
+          statement_end_date?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           user_id?: string;
           account_id?: string;
+          space_id?: string | null;
           filename?: string | null;
           row_count?: number;
+          skipped_count?: number;
+          statement_start_date?: string | null;
+          statement_end_date?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      known_recipients: {
+        Row: {
+          id: string;
+          user_id: string;
+          recipient: string;
+          is_own_account: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          recipient: string;
+          is_own_account?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          recipient?: string;
+          is_own_account?: boolean;
           created_at?: string;
         };
         Relationships: [];

@@ -1,8 +1,13 @@
 import { getUserSettings } from "@/lib/user-settings";
 import { SettingsForm } from "@/components/settings/settings-form";
+import { KnownRecipientsManager } from "@/components/settings/known-recipients-manager";
+import { getKnownRecipients } from "@/app/(app)/transactions/actions";
 
 export default async function SettingsPage() {
-  const settings = await getUserSettings();
+  const [settings, knownRecipients] = await Promise.all([
+    getUserSettings(),
+    getKnownRecipients(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -16,6 +21,7 @@ export default async function SettingsPage() {
       </div>
 
       <SettingsForm settings={settings} />
+      <KnownRecipientsManager knownRecipients={knownRecipients} />
     </div>
   );
 }

@@ -1,34 +1,45 @@
 import { createClient } from "@/lib/supabase/server";
 import { getPresetRange } from "@/lib/date-presets";
+import { buildOwnAccountSet, isTransferRecipient } from "@/lib/known-recipients";
 import { TransactionsView } from "@/components/transactions/transactions-view";
 
 export default async function TransactionsPage() {
   const supabase = await createClient();
   const { from, to } = getPresetRange("month");
 
-  const [{ data: accounts }, { data: spaces }, { data: categories }, { data: transactions }] =
-    await Promise.all([
-      supabase
-        .from("accounts")
-        .select("id, name")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("spaces")
-        .select("id, name")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("categories")
-        .select("id, name, color, icon")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("transactions")
-        .select(
-          "id, account_id, category_id, space_id, amount, recipient, description, occurred_at, is_recurring",
-        )
-        .gte("occurred_at", from ?? undefined)
-        .lte("occurred_at", to ?? undefined)
-        .order("occurred_at", { ascending: false }),
-    ]);
+  const [
+    { data: accounts },
+    { data: spaces },
+    { data: categories },
+    { data: transactions },
+    { data: knownRecipients },
+  ] = await Promise.all([
+    supabase
+      .from("accounts")
+      .select("id, name")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("spaces")
+      .select("id, name")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("categories")
+      .select("id, name, color, icon")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("transactions")
+      .select(
+        "id, account_id, category_id, space_id, amount, recipient, description, raw_description, occurred_at, is_recurring",
+      )
+      .gte("occurred_at", from ?? undefined)
+      .lte("occurred_at", to ?? undefined)
+      .order("occurred_at", { ascending: false }),
+    supabase.from("known_recipients").select("recipient, is_own_account"),
+  ]);
+
+  const ownAccountRecipients = buildOwnAccountSet(
+    (knownRecipients ?? []).map((r) => ({ recipient: r.recipient, isOwnAccount: r.is_own_account })),
+  );
 
   const initialRows = (transactions ?? []).map((row) => ({
     id: row.id,
@@ -38,8 +49,10 @@ export default async function TransactionsPage() {
     amount: row.amount,
     recipient: row.recipient,
     description: row.description,
+    rawDescription: row.raw_description,
     occurredAt: row.occurred_at,
     isRecurring: row.is_recurring,
+    isTransfer: isTransferRecipient(row.recipient, ownAccountRecipients),
   }));
 
   return (

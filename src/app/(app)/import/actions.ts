@@ -20,7 +20,14 @@ export type SpaceChoice =
   | { kind: "none" };
 
 export type ImportResult =
-  | { success: true; count: number; accountName: string }
+  | {
+      success: true;
+      count: number;
+      accountName: string;
+      skippedCount: number;
+      statementStartDate: string | null;
+      statementEndDate: string | null;
+    }
   | { success: false; error: string };
 
 export async function importTransactions(
@@ -28,6 +35,7 @@ export async function importTransactions(
   space: SpaceChoice,
   rows: ImportRow[],
   filename: string | null,
+  skippedCount: number,
 ): Promise<ImportResult> {
   const supabase = await createClient();
   const {
@@ -107,7 +115,7 @@ export async function importTransactions(
       category_id: null,
       amount: row.amount,
       recipient: row.recipient,
-      description: row.description ?? "",
+      raw_description: row.description,
       occurred_at: row.date,
       is_recurring: false,
     })),
@@ -117,14 +125,29 @@ export async function importTransactions(
     return { success: false, error: insertError.message };
   }
 
+  const dates = rows.map((r) => r.date).sort();
+  const statementStartDate = dates[0]?.slice(0, 10) ?? null;
+  const statementEndDate = dates[dates.length - 1]?.slice(0, 10) ?? null;
+
   // Best-effort history log — the transactions themselves already landed
   // successfully above, so a failure here shouldn't fail the whole import.
   await supabase.from("imports").insert({
     user_id: user.id,
     account_id: accountId,
+    space_id: spaceId,
     filename,
     row_count: rows.length,
+    skipped_count: skippedCount,
+    statement_start_date: statementStartDate,
+    statement_end_date: statementEndDate,
   });
 
-  return { success: true, count: rows.length, accountName };
+  return {
+    success: true,
+    count: rows.length,
+    accountName,
+    skippedCount,
+    statementStartDate,
+    statementEndDate,
+  };
 }

@@ -58,9 +58,13 @@ export function ImportWizard({
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ count: number; accountName: string } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{
+    count: number;
+    accountName: string;
+    skippedCount: number;
+    statementStartDate: string | null;
+    statementEndDate: string | null;
+  } | null>(null);
 
   // Formalises the timezone the date parser's free-text fallback uses: the
   // user's stored preference if they have one, otherwise the browser's own
@@ -105,10 +109,16 @@ export function ImportWizard({
     });
   }
 
-  async function handleConfirm(validRows: ImportRow[]) {
+  async function handleConfirm(validRows: ImportRow[], skippedCount: number) {
     setSubmitting(true);
     setSubmitError(null);
-    const res = await importTransactions(accountChoice, spaceChoice, validRows, fileName);
+    const res = await importTransactions(
+      accountChoice,
+      spaceChoice,
+      validRows,
+      fileName,
+      skippedCount,
+    );
     setSubmitting(false);
 
     if (!res.success) {
@@ -116,7 +126,13 @@ export function ImportWizard({
       return;
     }
 
-    setResult({ count: res.count, accountName: res.accountName });
+    setResult({
+      count: res.count,
+      accountName: res.accountName,
+      skippedCount: res.skippedCount,
+      statementStartDate: res.statementStartDate,
+      statementEndDate: res.statementEndDate,
+    });
     setStep("done");
     // Re-fetch server data (accounts/spaces/settings + import history) in the
     // background so the history list below reflects this import.
@@ -134,48 +150,53 @@ export function ImportWizard({
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex gap-8">
       <StepIndicator step={step} />
 
-      {step === "upload" && (
-        <UploadStep onFile={handleFile} reading={reading} error={parseError} />
-      )}
+      <div className="min-w-0 flex-1">
+        {step === "upload" && (
+          <UploadStep onFile={handleFile} reading={reading} error={parseError} />
+        )}
 
-      {step === "account" && (
-        <AccountSpaceStep
-          accounts={accounts}
-          spaces={spaces}
-          accountChoice={accountChoice}
-          spaceChoice={spaceChoice}
-          onChangeAccount={setAccountChoice}
-          onChangeSpace={setSpaceChoice}
-          onBack={() => setStep("upload")}
-          onNext={() => setStep("mapping")}
-        />
-      )}
+        {step === "account" && (
+          <AccountSpaceStep
+            accounts={accounts}
+            spaces={spaces}
+            accountChoice={accountChoice}
+            spaceChoice={spaceChoice}
+            onChangeAccount={setAccountChoice}
+            onChangeSpace={setSpaceChoice}
+            onBack={() => setStep("upload")}
+            onNext={() => setStep("mapping")}
+          />
+        )}
 
-      {step === "mapping" && (
-        <MappingStep
-          headers={headers}
-          rows={rows}
-          mapping={mapping}
-          onChangeMapping={setMapping}
-          timezone={timezone}
-          defaultDecimalSeparator={settings.decimalSeparator}
-          onBack={() => setStep("account")}
-          onConfirm={handleConfirm}
-          submitting={submitting}
-          submitError={submitError}
-        />
-      )}
+        {step === "mapping" && (
+          <MappingStep
+            headers={headers}
+            rows={rows}
+            mapping={mapping}
+            onChangeMapping={setMapping}
+            timezone={timezone}
+            defaultDecimalSeparator={settings.decimalSeparator}
+            onBack={() => setStep("account")}
+            onConfirm={handleConfirm}
+            submitting={submitting}
+            submitError={submitError}
+          />
+        )}
 
-      {step === "done" && result && (
-        <DoneStep
-          count={result.count}
-          accountName={result.accountName}
-          onImportAnother={handleImportAnother}
-        />
-      )}
+        {step === "done" && result && (
+          <DoneStep
+            count={result.count}
+            accountName={result.accountName}
+            skippedCount={result.skippedCount}
+            statementStartDate={result.statementStartDate}
+            statementEndDate={result.statementEndDate}
+            onImportAnother={handleImportAnother}
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -119,6 +119,22 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+export function TransferIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M7 7h12l-4-4M17 17H5l4 4" />
+    </svg>
+  );
+}
+
+export function FilterIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 6h16M7 12h10M10 18h4" />
+    </svg>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

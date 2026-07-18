@@ -19,17 +19,24 @@ export default async function ImportPage() {
       getUserSettings(),
       supabase
         .from("imports")
-        .select("id, filename, row_count, created_at, account_id")
+        .select(
+          "id, filename, row_count, skipped_count, statement_start_date, statement_end_date, created_at, account_id, space_id",
+        )
         .order("created_at", { ascending: false }),
     ]);
 
   const accountsById = new Map((accounts ?? []).map((a) => [a.id, a.name]));
+  const spacesById = new Map((spaces ?? []).map((s) => [s.id, s.name]));
   const importHistory = (imports ?? []).map((imp) => ({
     id: imp.id,
     filename: imp.filename,
     rowCount: imp.row_count,
+    skippedCount: imp.skipped_count,
     createdAt: imp.created_at,
     accountName: accountsById.get(imp.account_id) ?? "Unknown account",
+    spaceName: imp.space_id ? (spacesById.get(imp.space_id) ?? null) : null,
+    statementStartDate: imp.statement_start_date,
+    statementEndDate: imp.statement_end_date,
   }));
 
   return (

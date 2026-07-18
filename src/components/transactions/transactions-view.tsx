@@ -9,10 +9,13 @@ import {
 import { FilterSummary } from "@/components/transactions/filter-summary";
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import type { CategoryInfo } from "@/components/transactions/category-badge";
+import { FilterIcon } from "@/components/icons/dashboard-icons";
+import { normalizeRecipient } from "@/lib/known-recipients";
 import {
   getFilteredTransactions,
   updateTransaction,
   createCategory,
+  setRecipientOwnAccount,
   type TransactionRowData,
 } from "@/app/(app)/transactions/actions";
 import { getPresetRange } from "@/lib/date-presets";
@@ -50,6 +53,7 @@ export function TransactionsView({
     dateFrom: monthRange.from,
     dateTo: monthRange.to,
   });
+  const [showFilters, setShowFilters] = useState(false);
 
   const [categories, setCategories] = useState<CategoryInfo[]>(initialCategories);
   const [rows, setRows] = useState<TransactionRowData[]>(initialRows);
@@ -60,6 +64,17 @@ export function TransactionsView({
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
   const spacesById = useMemo(() => new Map(spaces.map((s) => [s.id, s.name])), [spaces]);
   const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+
+  const hasActiveFilters =
+    filters.spaceId !== null ||
+    filters.accountId !== null ||
+    filters.categoryIds.length > 0 ||
+    filters.amountMin !== "" ||
+    filters.amountMax !== "" ||
+    filters.dateFrom !== monthRange.from ||
+    filters.dateTo !== monthRange.to;
+
+  const uncategorizedCount = rows.filter((r) => !r.categoryId && !r.isTransfer).length;
 
   // Debounced refetch whenever any filter changes (skips the first render —
   // the server already fetched the default "this month" view).
@@ -109,6 +124,18 @@ export function TransactionsView({
     void updateTransaction(id, updates);
   }
 
+  function handleToggleTransfer(recipient: string, isOwnAccount: boolean) {
+    const normalized = normalizeRecipient(recipient);
+    setRows((prev) =>
+      prev.map((r) =>
+        r.recipient && normalizeRecipient(r.recipient) === normalized
+          ? { ...r, isTransfer: isOwnAccount }
+          : r,
+      ),
+    );
+    void setRecipientOwnAccount(recipient, isOwnAccount);
+  }
+
   async function handleCreateCategory(
     name: string,
     color: string,
@@ -123,15 +150,48 @@ export function TransactionsView({
 
   return (
     <div className="flex flex-col gap-5">
-      <TransactionsFilters
-        accounts={accounts}
-        spaces={spaces}
-        categories={categories}
-        filters={filters}
-        onChange={handleFilterChange}
-      />
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowFilters((v) => !v)}
+          className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium transition-colors ${
+            showFilters
+              ? "bg-ink-solid text-white"
+              : "border border-border bg-surface text-muted hover:text-foreground"
+          }`}
+        >
+          <FilterIcon className="h-4 w-4" />
+          Filters
+          {hasActiveFilters && (
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${showFilters ? "bg-white" : "bg-violet-400"}`}
+            />
+          )}
+        </button>
+      </div>
+
+      {showFilters && (
+        <TransactionsFilters
+          accounts={accounts}
+          spaces={spaces}
+          categories={categories}
+          filters={filters}
+          onChange={handleFilterChange}
+        />
+      )}
 
       <FilterSummary rows={rows} categoriesById={categoriesById} />
+
+      {uncategorizedCount > 0 && (
+        <Card tone="amber" className="flex items-center justify-between py-4">
+          <p className="text-[13px] font-medium text-foreground">
+            {uncategorizedCount} transaction{uncategorizedCount === 1 ? "" : "s"} uncategorized
+          </p>
+          <span className="text-[12px] text-muted">
+            Click a category badge below to label them.
+          </span>
+        </Card>
+      )}
 
       <Card className="p-0">
         {error && (
@@ -172,6 +232,7 @@ export function TransactionsView({
                     spaceName={row.spaceId ? (spacesById.get(row.spaceId) ?? null) : null}
                     categories={categories}
                     onUpdate={handleUpdate}
+                    onToggleTransfer={handleToggleTransfer}
                     onCreateCategory={handleCreateCategory}
                   />
                 ))}

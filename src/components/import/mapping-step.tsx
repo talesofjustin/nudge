@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectItem } from "@/components/ui/select";
 import { FilterChip } from "@/components/ui/pill";
 import { Button } from "@/components/ui/button";
+import { ProcessingIndicator } from "@/components/import/processing-indicator";
 import {
   distinctValues,
   guessDecimalSeparator,
@@ -33,7 +34,7 @@ type Props = {
   timezone: string;
   defaultDecimalSeparator: DecimalSeparator | null;
   onBack: () => void;
-  onConfirm: (validRows: ImportRow[]) => void;
+  onConfirm: (validRows: ImportRow[], skippedCount: number) => void;
   submitting: boolean;
   submitError: string | null;
 };
@@ -79,6 +80,14 @@ export function MappingStep({
   const validRows = mapped.filter((r) => r.valid);
   const skippedCount = mapped.length - validRows.length;
   const canConfirm = mapping.date !== null && mapping.amount !== null && validRows.length > 0;
+
+  if (submitting) {
+    return (
+      <Card>
+        <ProcessingIndicator variant="importing" />
+      </Card>
+    );
+  }
 
   return (
     <Card className="flex flex-col gap-6">
@@ -218,6 +227,7 @@ export function MappingStep({
                 recipient: r.recipient,
                 description: r.description,
               })),
+              skippedCount,
             )
           }
         >

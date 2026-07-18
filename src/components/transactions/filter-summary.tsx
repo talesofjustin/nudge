@@ -15,6 +15,7 @@ export function FilterSummary({
   const expenseByCategory = new Map<string, number>();
 
   for (const row of rows) {
+    if (row.isTransfer) continue;
     if (row.amount > 0) {
       income += row.amount;
     } else {

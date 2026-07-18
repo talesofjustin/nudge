@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { buildOwnAccountSet, isTransferRecipient } from "@/lib/known-recipients";
 
 export type TransactionFilters = {
   spaceId: string | null;
@@ -19,9 +20,11 @@ export type TransactionRowData = {
   spaceId: string | null;
   amount: number;
   recipient: string | null;
-  description: string;
+  description: string | null;
+  rawDescription: string | null;
   occurredAt: string;
   isRecurring: boolean;
+  isTransfer: boolean;
 };
 
 export async function getFilteredTransactions(
@@ -39,7 +42,7 @@ export async function getFilteredTransactions(
   let query = supabase
     .from("transactions")
     .select(
-      "id, account_id, category_id, space_id, amount, recipient, description, occurred_at, is_recurring",
+      "id, account_id, category_id, space_id, amount, recipient, description, raw_description, occurred_at, is_recurring",
     )
     .order("occurred_at", { ascending: false });
 
@@ -51,7 +54,10 @@ export async function getFilteredTransactions(
   if (filters.dateFrom) query = query.gte("occurred_at", filters.dateFrom);
   if (filters.dateTo) query = query.lte("occurred_at", filters.dateTo);
 
-  const { data, error } = await query;
+  const [{ data, error }, ownAccountRecipients] = await Promise.all([
+    query,
+    getOwnAccountSet(supabase, user.id),
+  ]);
 
   if (error) {
     return { success: false, error: error.message };
@@ -67,10 +73,76 @@ export async function getFilteredTransactions(
       amount: row.amount,
       recipient: row.recipient,
       description: row.description,
+      rawDescription: row.raw_description,
       occurredAt: row.occurred_at,
       isRecurring: row.is_recurring,
+      isTransfer: isTransferRecipient(row.recipient, ownAccountRecipients),
     })),
   };
+}
+
+async function getOwnAccountSet(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<Set<string>> {
+  const { data } = await supabase
+    .from("known_recipients")
+    .select("recipient, is_own_account")
+    .eq("user_id", userId);
+  return buildOwnAccountSet(
+    (data ?? []).map((r) => ({ recipient: r.recipient, isOwnAccount: r.is_own_account })),
+  );
+}
+
+export type KnownRecipientData = { recipient: string; isOwnAccount: boolean };
+
+export async function getKnownRecipients(): Promise<KnownRecipientData[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("known_recipients")
+    .select("recipient, is_own_account")
+    .eq("user_id", user.id)
+    .order("recipient", { ascending: true });
+
+  return (data ?? []).map((r) => ({ recipient: r.recipient, isOwnAccount: r.is_own_account }));
+}
+
+// Flagging inserts/updates a row; unflagging deletes it — known_recipients
+// only ever needs to hold recipients that ARE own accounts, so there is no
+// need to persist explicit `is_own_account: false` rows.
+export async function setRecipientOwnAccount(
+  recipient: string,
+  isOwnAccount: boolean,
+): Promise<{ success: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { success: false };
+
+  if (isOwnAccount) {
+    const { error } = await supabase
+      .from("known_recipients")
+      .upsert(
+        { user_id: user.id, recipient, is_own_account: true },
+        { onConflict: "user_id,recipient" },
+      );
+    return { success: !error };
+  }
+
+  const { error } = await supabase
+    .from("known_recipients")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("recipient", recipient);
+  return { success: !error };
 }
 
 export async function updateTransaction(
