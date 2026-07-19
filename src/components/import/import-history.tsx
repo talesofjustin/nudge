@@ -1,5 +1,11 @@
+"use client";
+
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { TrashIcon } from "@/components/icons/dashboard-icons";
 import { formatStatementPeriod } from "@/lib/statement-period";
+import { deleteImportHistoryEntry } from "@/app/(app)/import/actions";
 
 export type ImportHistoryEntry = {
   id: string;
@@ -21,7 +27,21 @@ function formatDate(iso: string): string {
   });
 }
 
-export function ImportHistory({ imports }: { imports: ImportHistoryEntry[] }) {
+export function ImportHistory({ imports: initialImports }: { imports: ImportHistoryEntry[] }) {
+  const [imports, setImports] = useState(initialImports);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    const res = await deleteImportHistoryEntry(id);
+    setDeletingId(null);
+    if (res.success) {
+      setImports((prev) => prev.filter((i) => i.id !== id));
+    }
+    setConfirmingId(null);
+  }
+
   if (imports.length === 0) return null;
 
   return (
@@ -33,6 +53,7 @@ export function ImportHistory({ imports }: { imports: ImportHistoryEntry[] }) {
             imp.statementStartDate,
             imp.statementEndDate,
           );
+          const confirming = confirmingId === imp.id;
           return (
             <div key={imp.id} className="flex items-center justify-between gap-4 py-3.5">
               <div>
@@ -50,6 +71,39 @@ export function ImportHistory({ imports }: { imports: ImportHistoryEntry[] }) {
                   {imp.filename && ` · ${imp.filename}`}
                 </p>
               </div>
+
+              {confirming ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-[12px] text-muted">Remove this entry?</span>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    className="h-7 px-2 text-[12px]"
+                    onClick={() => setConfirmingId(null)}
+                    disabled={deletingId === imp.id}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    className="h-7 border-danger px-2 text-[12px] text-danger hover:bg-danger/10"
+                    onClick={() => handleDelete(imp.id)}
+                    disabled={deletingId === imp.id}
+                  >
+                    {deletingId === imp.id ? "Removing…" : "Confirm"}
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingId(imp.id)}
+                  title="Remove this history entry"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-2 transition-colors hover:bg-canvas hover:text-danger"
+                >
+                  <TrashIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           );
         })}

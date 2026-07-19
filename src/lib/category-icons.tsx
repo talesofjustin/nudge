@@ -1,5 +1,5 @@
 import type { ComponentType, SVGProps } from "react";
-import { HeartIcon, TagIcon, TrendingUpIcon } from "@/components/icons/dashboard-icons";
+import { HeartIcon, TagIcon, TrendingUpIcon, WalletIcon } from "@/components/icons/dashboard-icons";
 import {
   CarIcon,
   DumbbellIcon,
@@ -17,6 +17,7 @@ import {
 // categories/icons are introduced — `TagIcon` is the fallback for unknown or
 // user-picked-but-unmapped values.
 export const CATEGORY_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
+  wallet: WalletIcon,
   car: CarIcon,
   utensils: UtensilsIcon,
   dumbbell: DumbbellIcon,

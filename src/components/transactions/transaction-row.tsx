@@ -158,7 +158,7 @@ export function TransactionRow({
         </td>
         <td className="whitespace-nowrap px-3 py-3 text-[13px] text-muted">{accountName}</td>
         <td className="whitespace-nowrap px-3 py-3 text-[13px] text-muted">{spaceName || "—"}</td>
-        <td className="px-3 py-3">
+        <td className="px-3 py-3 text-center">
           <button
             type="button"
             onClick={() => onUpdate(row.id, { isRecurring: !row.isRecurring })}

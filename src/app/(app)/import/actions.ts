@@ -20,6 +20,28 @@ async function resolveExistingAccountId(account: AccountChoice): Promise<string 
   return null;
 }
 
+// Removes a stale import history entry (e.g. after the transactions it
+// logged were deleted separately) — does not touch any transactions.
+export async function deleteImportHistoryEntry(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "You must be logged in." };
+  }
+
+  const { error } = await supabase.from("imports").delete().eq("id", id).eq("user_id", user.id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
 export async function runImportChecks(
   account: AccountChoice,
   rows: ImportRow[],

@@ -27,12 +27,31 @@ export type FlagAction = {
   variant?: "primary" | "secondary" | "ghost";
 };
 
+// A single line item within a flag that groups several related decisions
+// under one card (e.g. one row per recipient in a "frequent transfers"
+// flag) — each item resolves independently via its own actions.
+export type FlagItem = {
+  id: string;
+  label: string;
+  actions: FlagAction[];
+  data?: Record<string, string>;
+};
+
 export type ImportFlag = {
   id: string;
   checkId: string;
   title: string;
   message: string;
-  actions: FlagAction[];
+  // Simple flags (e.g. duplicate-import) use a flat `actions` list resolved
+  // once for the whole flag. Flags covering several related decisions (e.g.
+  // transfer-detection covering multiple recipients) use `items` instead —
+  // exactly one of the two should be set.
+  actions?: FlagAction[];
+  items?: FlagItem[];
+  // Optional sample evidence lines shown under the message (e.g. a few
+  // matching transactions) so the user can visually confirm the flag before
+  // acting on it.
+  evidence?: string[];
   data?: Record<string, string>;
 };
 

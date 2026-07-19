@@ -8,9 +8,15 @@ import { CheckIcon } from "@/components/icons/dashboard-icons";
 import { ProcessingIndicator } from "@/components/import/processing-indicator";
 import { runImportChecks, type AccountChoice, type ImportRow } from "@/app/(app)/import/actions";
 import { resolveTransferFlag } from "@/app/(app)/transactions/actions";
-import type { ImportFlag } from "@/lib/import-checks";
+import type { FlagItem, ImportFlag } from "@/lib/import-checks";
 
-type FlagState = ImportFlag & { resolved: boolean };
+type ItemState = FlagItem & { resolved: boolean };
+type FlagState = Omit<ImportFlag, "items"> & { resolved: boolean; items?: ItemState[] };
+
+function isFlagResolved(flag: FlagState): boolean {
+  if (flag.items) return flag.items.every((i) => i.resolved);
+  return flag.resolved;
+}
 
 export function ReviewStep({
   rows,
@@ -44,7 +50,13 @@ export function ReviewStep({
           if (!cancelled) onConfirm();
         }, 900);
       } else {
-        setFlags(result.flags.map((f) => ({ ...f, resolved: false })));
+        setFlags(
+          result.flags.map((f) => ({
+            ...f,
+            resolved: false,
+            items: f.items?.map((i) => ({ ...i, resolved: false })),
+          })),
+        );
         setStatus("flags");
       }
     })();
@@ -56,18 +68,32 @@ export function ReviewStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleAction(flag: FlagState, actionId: string) {
-    if (flag.checkId === "transfer-detection" && flag.data?.recipient) {
-      if (actionId === "confirm") await resolveTransferFlag(flag.data.recipient, true);
-      if (actionId === "skip") await resolveTransferFlag(flag.data.recipient, false);
-    }
-
+  async function handleFlagAction(flag: FlagState, actionId: string) {
     if (flag.checkId === "duplicate-import" && actionId === "cancel") {
       onBack();
       return;
     }
-
     setFlags((prev) => prev.map((f) => (f.id === flag.id ? { ...f, resolved: true } : f)));
+  }
+
+  async function handleItemAction(flag: FlagState, item: ItemState, actionId: string) {
+    if (flag.checkId === "transfer-detection" && item.data?.recipient) {
+      if (actionId === "own") await resolveTransferFlag(item.data.recipient, true);
+      if (actionId === "shared") await resolveTransferFlag(item.data.recipient, false);
+      // "later" leaves no known_recipients row, so this recipient is
+      // re-evaluated on the next import.
+    }
+
+    setFlags((prev) =>
+      prev.map((f) =>
+        f.id === flag.id
+          ? {
+              ...f,
+              items: f.items?.map((i) => (i.id === item.id ? { ...i, resolved: true } : i)),
+            }
+          : f,
+      ),
+    );
   }
 
   if (status === "checking") {
@@ -89,7 +115,7 @@ export function ReviewStep({
     );
   }
 
-  const allResolved = flags.every((f) => f.resolved);
+  const allResolved = flags.every(isFlagResolved);
 
   return (
     <Card className="flex flex-col gap-5">
@@ -99,35 +125,78 @@ export function ReviewStep({
       </div>
 
       <div className="flex flex-col gap-3">
-        {flags.map((flag) => (
-          <div
-            key={flag.id}
-            className={`rounded-2xl border p-4 transition-colors ${
-              flag.resolved ? "border-border bg-canvas opacity-60" : "border-violet-400 bg-canvas"
-            }`}
-          >
-            <p className="text-[14px] font-medium text-foreground">{flag.title}</p>
-            <p className="mt-1 text-[13px] text-muted">{flag.message}</p>
+        {flags.map((flag) => {
+          const resolved = isFlagResolved(flag);
+          return (
+            <div
+              key={flag.id}
+              className={`rounded-2xl border p-4 transition-colors ${
+                resolved ? "border-border bg-canvas opacity-60" : "border-violet-400 bg-canvas"
+              }`}
+            >
+              <p className="text-[14px] font-medium text-foreground">{flag.title}</p>
+              <p className="mt-1 text-[13px] text-muted">{flag.message}</p>
 
-            {flag.resolved ? (
-              <p className="mt-2 text-[12px] font-medium text-mint">Resolved</p>
-            ) : (
-              <div className="mt-3 flex gap-2">
-                {flag.actions.map((action) => (
-                  <Button
-                    key={action.id}
-                    type="button"
-                    variant={action.variant ?? "secondary"}
-                    className="h-8 px-3 text-[13px]"
-                    onClick={() => handleAction(flag, action.id)}
-                  >
-                    {action.label}
-                  </Button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+              {flag.evidence && flag.evidence.length > 0 && (
+                <ul className="mt-2 flex flex-col gap-0.5 rounded-xl bg-surface p-2.5 text-[12px] text-muted">
+                  {flag.evidence.map((line, i) => (
+                    <li key={i} className="font-mono">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {flag.items ? (
+                <div className="mt-3 flex flex-col gap-2">
+                  {flag.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface px-3 py-2"
+                    >
+                      <span className="text-[13px] font-medium text-foreground">
+                        {item.label}
+                      </span>
+                      {item.resolved ? (
+                        <span className="text-[12px] font-medium text-mint">Resolved</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {item.actions.map((action) => (
+                            <Button
+                              key={action.id}
+                              type="button"
+                              variant={action.variant ?? "secondary"}
+                              className="h-7 px-2.5 text-[12px]"
+                              onClick={() => handleItemAction(flag, item, action.id)}
+                            >
+                              {action.label}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : flag.resolved ? (
+                <p className="mt-2 text-[12px] font-medium text-mint">Resolved</p>
+              ) : (
+                <div className="mt-3 flex gap-2">
+                  {(flag.actions ?? []).map((action) => (
+                    <Button
+                      key={action.id}
+                      type="button"
+                      variant={action.variant ?? "secondary"}
+                      className="h-8 px-3 text-[13px]"
+                      onClick={() => handleFlagAction(flag, action.id)}
+                    >
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex items-center justify-between">

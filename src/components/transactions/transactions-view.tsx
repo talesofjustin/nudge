@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TransactionsFilters } from "@/components/transactions/transactions-filters";
-import { FilterSummary } from "@/components/transactions/filter-summary";
 import { PeriodBanner } from "@/components/transactions/period-banner";
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import type { CategoryInfo } from "@/components/transactions/category-badge";
@@ -60,7 +59,6 @@ export function TransactionsView({
 
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
   const spacesById = useMemo(() => new Map(spaces.map((s) => [s.id, s.name])), [spaces]);
-  const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
   const uncategorizedCount = rows.filter((r) => !r.categoryId && !r.isTransfer).length;
 
@@ -164,8 +162,6 @@ export function TransactionsView({
 
   return (
     <div className="flex flex-col gap-5">
-      <PeriodBanner period={filters.period} dateFrom={filters.dateFrom} dateTo={filters.dateTo} />
-
       <TransactionsFilters
         accounts={accounts}
         spaces={spaces}
@@ -174,8 +170,6 @@ export function TransactionsView({
         paydayAnchorDay={paydayAnchorDay}
         onChange={handleFilterChange}
       />
-
-      <FilterSummary rows={rows} categoriesById={categoriesById} />
 
       {uncategorizedCount > 0 && (
         <Card tone="amber" className="flex items-center justify-between py-4">
@@ -226,6 +220,10 @@ export function TransactionsView({
       )}
 
       <Card className="p-0">
+        <div className="border-b border-border px-6 py-4">
+          <PeriodBanner period={filters.period} dateFrom={filters.dateFrom} dateTo={filters.dateTo} />
+        </div>
+
         {error && (
           <p className="px-6 py-4 text-sm text-danger" role="alert">
             {error}
@@ -255,7 +253,9 @@ export function TransactionsView({
                   {COLUMNS.slice(1).map((col) => (
                     <th
                       key={col}
-                      className="whitespace-nowrap px-3 py-3 text-[12px] font-medium text-muted"
+                      className={`whitespace-nowrap px-3 py-3 text-[12px] font-medium text-muted ${
+                        col === "Recurring" ? "text-center" : ""
+                      }`}
                     >
                       {col}
                     </th>

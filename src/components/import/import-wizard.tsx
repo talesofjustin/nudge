@@ -166,7 +166,12 @@ export function ImportWizard({
 
   return (
     <div className="flex flex-col gap-6">
-      <StepIndicator step={step} />
+      {/* px-6 matches Card's own p-6 (used below and by ImportHistory) so the
+          indicator's left/right edges line up with the card content's edges
+          rather than spanning the full, wider container. */}
+      <div className="px-6">
+        <StepIndicator step={step} />
+      </div>
 
       {submitting ? (
         <Card>

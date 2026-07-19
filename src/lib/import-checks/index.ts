@@ -10,4 +10,4 @@ export const IMPORT_CHECKS: ImportCheck[] = [
   { id: transferDetectionCheck.CHECK_ID, run: transferDetectionCheck.run },
 ];
 
-export type { ImportCheck, ImportCheckContext, ImportFlag, FlagAction } from "./types";
+export type { ImportCheck, ImportCheckContext, ImportFlag, FlagAction, FlagItem } from "./types";

@@ -35,8 +35,19 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
   );
 
   let matchCount = 0;
+  const evidence: string[] = [];
   for (const row of ctx.rows) {
-    if (existingKeys.has(rowKey(row.date, row.amount, row.recipient))) matchCount++;
+    if (existingKeys.has(rowKey(row.date, row.amount, row.recipient))) {
+      matchCount++;
+      if (evidence.length < 5) {
+        const dateLabel = new Date(`${row.date.slice(0, 10)}T00:00:00Z`).toLocaleDateString(
+          undefined,
+          { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" },
+        );
+        const amountLabel = `${row.amount > 0 ? "+" : "-"}€${Math.abs(row.amount).toFixed(2)}`;
+        evidence.push(`${dateLabel} · ${row.recipient ?? "—"} · ${amountLabel}`);
+      }
+    }
   }
 
   const overlapRatio = matchCount / ctx.rows.length;
@@ -65,6 +76,7 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
       checkId: CHECK_ID,
       title: "This looks like a repeat import",
       message: `This looks similar to an import you already did on ${importedOn} (${matchCount} matching transaction${matchCount === 1 ? "" : "s"} found) — import anyway?`,
+      evidence,
       actions: [
         { id: "cancel", label: "Cancel", variant: "secondary" },
         { id: "confirm", label: "Import anyway", variant: "primary" },

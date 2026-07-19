@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { normalizeRecipient } from "@/lib/known-recipients";
-import type { ImportCheckContext, ImportFlag } from "./types";
+import type { FlagItem, ImportCheckContext, ImportFlag } from "./types";
 
 export const CHECK_ID = "transfer-detection";
 
@@ -51,22 +51,41 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
     .eq("user_id", ctx.userId);
   const decided = new Set((known ?? []).map((k) => normalizeRecipient(k.recipient)));
 
-  const flags: ImportFlag[] = [];
+  const items: FlagItem[] = [];
   for (const [key, entry] of agg) {
     if (decided.has(key)) continue;
     if (entry.inCount >= 2 && entry.outCount >= 2) {
-      flags.push({
+      items.push({
         id: `transfer:${key}`,
-        checkId: CHECK_ID,
-        title: "Possible transfer account",
-        message: `We noticed frequent transfers with ${entry.recipient} — is this one of your own accounts (e.g. a savings goal)?`,
+        label: entry.recipient,
         actions: [
-          { id: "skip", label: "No, keep as normal", variant: "secondary" },
-          { id: "confirm", label: "Yes, it's mine", variant: "primary" },
+          { id: "own", label: "Transfer to my own account", variant: "primary" },
+          { id: "shared", label: "Shared account, keep as normal", variant: "secondary" },
+          { id: "later", label: "Not sure, ask again later", variant: "ghost" },
         ],
         data: { recipient: entry.recipient },
       });
     }
   }
-  return flags;
+
+  if (items.length === 0) return [];
+
+  const flag: ImportFlag =
+    items.length === 1
+      ? {
+          id: "transfer-detection",
+          checkId: CHECK_ID,
+          title: "Possible transfer account",
+          message: `We noticed frequent transfers with ${items[0].label} — how should this be treated?`,
+          items,
+        }
+      : {
+          id: "transfer-detection",
+          checkId: CHECK_ID,
+          title: "We noticed frequent back-and-forth with a few recipients",
+          message: "For each one, let us know how it should be treated going forward.",
+          items,
+        };
+
+  return [flag];
 }

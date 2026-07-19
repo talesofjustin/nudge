@@ -119,9 +119,13 @@ export async function getKnownRecipients(): Promise<KnownRecipientData[]> {
   return (data ?? []).map((r) => ({ recipient: r.recipient, isOwnAccount: r.is_own_account }));
 }
 
-// Called from the import review step's transfer-detection flag. Always
-// leaves a row behind (true or false) so that recipient isn't asked about
-// again on future imports — unlike Settings' full "unflag" below.
+// Called from the import review step's transfer-detection flag when the
+// user picks "Transfer to my own account" (true) or "Shared account, keep
+// as normal" (false) — either way, a row is left behind so that recipient
+// isn't asked about again on future imports. The third option ("Not sure,
+// ask again later") simply doesn't call this at all, leaving no row so the
+// recipient is re-evaluated next time. Unlike Settings' full "unflag"
+// below, this never deletes a row.
 export async function resolveTransferFlag(
   recipient: string,
   isOwnAccount: boolean,
