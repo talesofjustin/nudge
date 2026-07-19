@@ -53,6 +53,11 @@ export type ImportFlag = {
   // acting on it.
   evidence?: string[];
   data?: Record<string, string>;
+  // Whether this flag must be resolved before the user can continue to the
+  // final import. Defaults to true — set false for flags that are purely
+  // informational/optional (e.g. transfer-detection: ignoring it just means
+  // being asked again next import, nothing is lost by skipping it now).
+  blocking?: boolean;
 };
 
 export type ImportCheck = {

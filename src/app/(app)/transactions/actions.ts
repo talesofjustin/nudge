@@ -120,11 +120,11 @@ export async function getKnownRecipients(): Promise<KnownRecipientData[]> {
 }
 
 // Called from the import review step's transfer-detection flag when the
-// user picks "Transfer to my own account" (true) or "Shared account, keep
-// as normal" (false) — either way, a row is left behind so that recipient
-// isn't asked about again on future imports. The third option ("Not sure,
-// ask again later") simply doesn't call this at all, leaving no row so the
-// recipient is re-evaluated next time. Unlike Settings' full "unflag"
+// user answers "should these count toward income/expense?" — no (true,
+// excluded) or yes (false, counted normally) — either way, a row is left
+// behind so that recipient isn't asked about again on future imports.
+// Leaving a recipient unresolved in the review step simply never calls
+// this, so it's re-evaluated next import. Unlike Settings' full "unflag"
 // below, this never deletes a row.
 export async function resolveTransferFlag(
   recipient: string,

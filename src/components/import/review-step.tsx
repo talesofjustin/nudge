@@ -18,6 +18,10 @@ function isFlagResolved(flag: FlagState): boolean {
   return flag.resolved;
 }
 
+function isFlagBlocking(flag: FlagState): boolean {
+  return flag.blocking !== false;
+}
+
 export function ReviewStep({
   rows,
   accountChoice,
@@ -78,10 +82,8 @@ export function ReviewStep({
 
   async function handleItemAction(flag: FlagState, item: ItemState, actionId: string) {
     if (flag.checkId === "transfer-detection" && item.data?.recipient) {
-      if (actionId === "own") await resolveTransferFlag(item.data.recipient, true);
-      if (actionId === "shared") await resolveTransferFlag(item.data.recipient, false);
-      // "later" leaves no known_recipients row, so this recipient is
-      // re-evaluated on the next import.
+      if (actionId === "exclude") await resolveTransferFlag(item.data.recipient, true);
+      if (actionId === "count") await resolveTransferFlag(item.data.recipient, false);
     }
 
     setFlags((prev) =>
@@ -115,7 +117,7 @@ export function ReviewStep({
     );
   }
 
-  const allResolved = flags.every(isFlagResolved);
+  const canContinue = flags.every((f) => !isFlagBlocking(f) || isFlagResolved(f));
 
   return (
     <Card className="flex flex-col gap-5">
@@ -203,7 +205,7 @@ export function ReviewStep({
         <Button variant="ghost" type="button" onClick={onBack}>
           Back
         </Button>
-        <Button type="button" disabled={!allResolved} onClick={onConfirm}>
+        <Button type="button" disabled={!canContinue} onClick={onConfirm}>
           Continue to import
         </Button>
       </div>

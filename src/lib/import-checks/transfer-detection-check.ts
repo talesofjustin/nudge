@@ -59,9 +59,8 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
         id: `transfer:${key}`,
         label: entry.recipient,
         actions: [
-          { id: "own", label: "Transfer to my own account", variant: "primary" },
-          { id: "shared", label: "Shared account, keep as normal", variant: "secondary" },
-          { id: "later", label: "Not sure, ask again later", variant: "ghost" },
+          { id: "count", label: "Yes, count them normally", variant: "secondary" },
+          { id: "exclude", label: "No, exclude them (it's a transfer)", variant: "primary" },
         ],
         data: { recipient: entry.recipient },
       });
@@ -70,21 +69,27 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
 
   if (items.length === 0) return [];
 
+  // Not blocking: this is a heads-up, not a warning — leaving a recipient
+  // unresolved just means it's asked about again on the next import, so it
+  // shouldn't hold up finishing this one.
   const flag: ImportFlag =
     items.length === 1
       ? {
           id: "transfer-detection",
           checkId: CHECK_ID,
           title: "Possible transfer account",
-          message: `We noticed frequent transfers with ${items[0].label} — how should this be treated?`,
+          message: `We noticed frequent transfers with ${items[0].label} — should these transactions count toward your income/expense totals?`,
           items,
+          blocking: false,
         }
       : {
           id: "transfer-detection",
           checkId: CHECK_ID,
           title: "We noticed frequent back-and-forth with a few recipients",
-          message: "For each one, let us know how it should be treated going forward.",
+          message:
+            "For each one: should these transactions count toward your income/expense totals? Leave any you're unsure about and we'll ask again next import.",
           items,
+          blocking: false,
         };
 
   return [flag];
