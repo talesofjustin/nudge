@@ -1,7 +1,10 @@
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
 
 type InputProps = InputHTMLAttributes<HTMLInputElement> & {
-  label: string;
+  // Omit entirely for compact inline uses (e.g. a table-row cell) where an
+  // adjacent label already identifies the field — the wrapper then skips
+  // the label row rather than reserving space for an empty one.
+  label?: string;
   // Rendered inline at the input's left edge (e.g. a currency symbol) —
   // the sizing class passed via `className` moves to this wrapper so the
   // input itself can stay a plain w-full fill of it.
@@ -11,9 +14,11 @@ type InputProps = InputHTMLAttributes<HTMLInputElement> & {
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, id, className = "", prefix, ...props }, ref) => (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-[13px] font-medium text-muted">
-        {label}
-      </label>
+      {label && (
+        <label htmlFor={id} className="text-[13px] font-medium text-muted">
+          {label}
+        </label>
+      )}
       <div className={`relative ${className}`}>
         {prefix && (
           <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-muted-2">

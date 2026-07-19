@@ -9,6 +9,7 @@ import { CategoryBadge, type CategoryInfo } from "@/components/transactions/cate
 import { CheckIcon } from "@/components/icons/dashboard-icons";
 import { getPresetRange, type DatePreset } from "@/lib/date-presets";
 import type { FiltersState } from "@/lib/transaction-filters";
+import { sanitizeAmountInput } from "@/lib/sanitize-amount";
 
 const ALL = "__all__";
 
@@ -55,18 +56,6 @@ function SecondaryFilterChip({
       </PopoverContent>
     </Popover>
   );
-}
-
-// Keeps the amount fields numeric without a native number input's spinner
-// arrows: digits, a single leading minus, a single decimal point.
-function sanitizeAmountInput(raw: string): string {
-  const negative = raw.trim().startsWith("-");
-  let value = raw.replace(/[^0-9.]/g, "");
-  const firstDot = value.indexOf(".");
-  if (firstDot !== -1) {
-    value = value.slice(0, firstDot + 1) + value.slice(firstDot + 1).replace(/\./g, "");
-  }
-  return (negative ? "-" : "") + value;
 }
 
 export function TransactionsToolbar({

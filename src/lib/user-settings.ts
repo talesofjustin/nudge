@@ -7,6 +7,7 @@ export type UserSettings = {
   decimalSeparator: DecimalSeparator | null;
   timezone: string | null;
   paydayAnchorDay: number | null;
+  budgetTipDismissed: boolean;
 };
 
 export async function getUserSettings(): Promise<UserSettings> {
@@ -15,11 +16,13 @@ export async function getUserSettings(): Promise<UserSettings> {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { decimalSeparator: null, timezone: null, paydayAnchorDay: null };
+  if (!user) {
+    return { decimalSeparator: null, timezone: null, paydayAnchorDay: null, budgetTipDismissed: false };
+  }
 
   const { data } = await supabase
     .from("user_settings")
-    .select("decimal_separator, timezone, payday_anchor_day")
+    .select("decimal_separator, timezone, payday_anchor_day, budget_tip_dismissed")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -27,6 +30,7 @@ export async function getUserSettings(): Promise<UserSettings> {
     decimalSeparator: data?.decimal_separator ?? null,
     timezone: data?.timezone ?? null,
     paydayAnchorDay: data?.payday_anchor_day ?? null,
+    budgetTipDismissed: data?.budget_tip_dismissed ?? false,
   };
 }
 
@@ -37,6 +41,7 @@ export async function upsertUserSettings(
     decimalSeparator: DecimalSeparator;
     timezone: string;
     paydayAnchorDay: number | null;
+    budgetTipDismissed: boolean;
   }>,
 ): Promise<{ success: boolean }> {
   const supabase = await createClient();
@@ -55,6 +60,9 @@ export async function upsertUserSettings(
       ...(partial.timezone !== undefined && { timezone: partial.timezone }),
       ...(partial.paydayAnchorDay !== undefined && {
         payday_anchor_day: partial.paydayAnchorDay,
+      }),
+      ...(partial.budgetTipDismissed !== undefined && {
+        budget_tip_dismissed: partial.budgetTipDismissed,
       }),
       updated_at: new Date().toISOString(),
     },

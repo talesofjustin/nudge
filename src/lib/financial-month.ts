@@ -35,3 +35,32 @@ export function getFinancialMonthRange(
 
   return { from: toISODate(start), to: toISODate(end) };
 }
+
+function fromISODate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// Steps to the adjacent financial month — a day past the current range's end
+// (for "next") or a day before its start (for "prev") always lands inside
+// the neighbouring period, so re-running getFinancialMonthRange from there
+// resolves the correct boundaries regardless of month length.
+export function shiftFinancialMonth(
+  current: { from: string; to: string },
+  anchorDay: number | null | undefined,
+  direction: "prev" | "next",
+): { from: string; to: string } {
+  const reference =
+    direction === "next" ? fromISODate(current.to) : fromISODate(current.from);
+  reference.setDate(reference.getDate() + (direction === "next" ? 1 : -1));
+  return getFinancialMonthRange(reference, anchorDay);
+}
+
+// The budgets table keys rows by a calendar-month date (its `month` column
+// requires date_trunc('month', month) = month). A financial month is
+// labeled by the calendar month it starts in — for the common case
+// (anchor day 1, or unset) this is identical to the financial month itself,
+// since the two already coincide.
+export function financialMonthBudgetKey(financialMonthFrom: string): string {
+  return `${financialMonthFrom.slice(0, 7)}-01`;
+}

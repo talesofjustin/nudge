@@ -2,8 +2,9 @@
 // 20260714173442_add_transactions_recipient.sql,
 // 20260714215055_user_settings.sql, 20260715110614_imports.sql,
 // 20260718161433_known_recipients.sql, 20260718161434_extend_imports.sql,
-// 20260718161435_transactions_raw_description.sql, and
-// 20260718224029_payday_anchor_day.sql. Shaped the way
+// 20260718161435_transactions_raw_description.sql,
+// 20260718224029_payday_anchor_day.sql, and
+// 20260719211329_budget_tip_dismissed.sql. Shaped the way
 // `supabase gen types typescript` would produce it, so running that command
 // later (once the migrations have been applied) is a drop-in replacement for
 // this file. `Relationships` is left empty here (no typed nested-select
@@ -168,6 +169,7 @@ export type Database = {
           decimal_separator: DecimalSeparator | null;
           timezone: string | null;
           payday_anchor_day: number | null;
+          budget_tip_dismissed: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -176,6 +178,7 @@ export type Database = {
           decimal_separator?: DecimalSeparator | null;
           timezone?: string | null;
           payday_anchor_day?: number | null;
+          budget_tip_dismissed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -184,6 +187,7 @@ export type Database = {
           decimal_separator?: DecimalSeparator | null;
           timezone?: string | null;
           payday_anchor_day?: number | null;
+          budget_tip_dismissed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
