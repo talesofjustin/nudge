@@ -74,10 +74,8 @@ export function DateRangePicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-colors ${
-            active
-              ? "bg-ink-solid text-white"
-              : "border border-border bg-surface text-muted hover:text-foreground"
+          className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors ${
+            active ? "bg-ink-solid text-white" : "text-muted hover:text-foreground"
           }`}
         >
           {label}

@@ -1,0 +1,108 @@
+"use client";
+
+function formatDay(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+function formatDayWithYear(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function formatRangeLabel(dateFrom: string, dateTo: string): string {
+  return `${formatDay(dateFrom)} – ${formatDayWithYear(dateTo)}`;
+}
+
+export function ContextStrip({
+  dateFrom,
+  dateTo,
+  count,
+  uncategorizedCount,
+  showOnlyUncategorized,
+  onToggleUncategorized,
+  selectedCount,
+  confirmingDelete,
+  deleting,
+  onStartConfirmDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  count: number;
+  uncategorizedCount: number;
+  showOnlyUncategorized: boolean;
+  onToggleUncategorized: () => void;
+  selectedCount: number;
+  confirmingDelete: boolean;
+  deleting: boolean;
+  onStartConfirmDelete: () => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border bg-canvas px-4 py-2.5">
+      <span className="text-[12.5px] text-muted">
+        {formatRangeLabel(dateFrom, dateTo)} · {count} transaction{count === 1 ? "" : "s"}
+      </span>
+
+      {selectedCount > 0 ? (
+        confirmingDelete ? (
+          <div className="flex items-center gap-2 text-[12.5px]">
+            <span className="text-muted">Delete {selectedCount} permanently?</span>
+            <button
+              type="button"
+              onClick={onCancelDelete}
+              disabled={deleting}
+              className="font-medium text-muted hover:text-foreground disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirmDelete}
+              disabled={deleting}
+              className="font-medium text-danger hover:underline disabled:opacity-50"
+            >
+              {deleting ? "Deleting…" : "Confirm"}
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-[12.5px]">
+            <span className="font-medium text-foreground">{selectedCount} selected</span>
+            <span className="text-muted">·</span>
+            <button
+              type="button"
+              onClick={onStartConfirmDelete}
+              className="font-medium text-danger hover:underline"
+            >
+              Delete
+            </button>
+          </div>
+        )
+      ) : uncategorizedCount > 0 ? (
+        <button
+          type="button"
+          onClick={onToggleUncategorized}
+          className={`inline-flex h-6 items-center rounded-full px-2.5 text-[12px] font-medium transition-shadow ${
+            showOnlyUncategorized ? "ring-2 ring-amber ring-offset-1 ring-offset-canvas" : ""
+          }`}
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--amber) 22%, var(--tint-base))",
+            color: "color-mix(in srgb, var(--amber) 70%, black)",
+          }}
+        >
+          {uncategorizedCount} uncategorized
+        </button>
+      ) : null}
+    </div>
+  );
+}

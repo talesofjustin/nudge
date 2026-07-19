@@ -143,6 +143,26 @@ body {
   color: var(--violet-600);
 }
 
+/* Thin, themed scrollbar for compact scroll areas (e.g. popover lists) —
+   the native default reads as jarring against this design's soft surfaces. */
+.themed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.themed-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.themed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 999px;
+}
+.themed-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-2);
+}
+
 @keyframes fade-in-up {
   from {
     opacity: 0;

@@ -8,11 +8,12 @@ import { ChevronRightIcon } from "@/components/icons/dashboard-icons";
 import { parseRawDescription } from "@/lib/parse-raw-description";
 import type { TransactionRowData } from "@/app/(app)/transactions/actions";
 
+export const COLUMN_COUNT = 9;
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
-    year: "numeric",
   });
 }
 
@@ -70,8 +71,8 @@ export function TransactionRow({
 
   return (
     <>
-      <tr className="h-14 border-b border-border last:border-0">
-        <td className="w-10 px-3 py-3">
+      <tr className="group h-[52px] border-b border-border last:border-0 hover:bg-canvas">
+        <td className="px-3 text-center align-middle">
           <input
             type="checkbox"
             checked={selected}
@@ -80,24 +81,24 @@ export function TransactionRow({
             aria-label="Select transaction"
           />
         </td>
-        <td className="whitespace-nowrap px-3 py-3 text-[13px] text-muted">
+        <td className="truncate px-3 align-middle text-[13px] text-muted">
           {formatDate(row.occurredAt)}
         </td>
-        <td className="whitespace-nowrap px-3 py-3 text-[13px] text-foreground">
+        <td className="truncate px-3 align-middle text-[13px] font-medium text-foreground">
           {row.recipient ? (
             <button
               type="button"
               onClick={() => onFilterByRecipient(row.recipient!)}
-              className="rounded-lg px-1.5 py-1 text-left hover:bg-canvas hover:underline"
+              className="max-w-full truncate rounded-lg px-1 py-1 text-left hover:underline"
               title={`Filter by ${row.recipient}`}
             >
               {row.recipient}
             </button>
           ) : (
-            "—"
+            <span className="text-muted-2">—</span>
           )}
         </td>
-        <td className="px-3 py-3 text-[13px] text-foreground">
+        <td className="px-3 align-middle text-[13px]">
           <div className="flex items-center gap-1">
             {editingDescription ? (
               <input
@@ -112,15 +113,19 @@ export function TransactionRow({
                     setEditingDescription(false);
                   }
                 }}
-                className="w-full min-w-[160px] rounded-lg border border-violet-400 bg-canvas px-2 py-1 text-[13px] text-foreground outline-none focus:shadow-[0_0_0_3px_var(--violet-200)]"
+                className="w-full min-w-0 rounded-lg border border-violet-400 bg-canvas px-2 py-1 text-[13px] text-foreground outline-none focus:shadow-[0_0_0_3px_var(--violet-200)]"
               />
             ) : (
               <button
                 type="button"
                 onClick={() => setEditingDescription(true)}
-                className="min-w-[160px] rounded-lg px-2 py-1 text-left hover:bg-canvas"
+                className="min-w-0 flex-1 truncate rounded-lg px-2 py-1 text-left transition-colors hover:bg-surface hover:ring-1 hover:ring-border"
               >
-                {row.description || <span className="text-muted-2">Add a note…</span>}
+                {row.description ? (
+                  <span className="text-foreground">{row.description}</span>
+                ) : (
+                  <span className="text-muted-2 opacity-50">Add a note…</span>
+                )}
               </button>
             )}
             {row.rawDescription && (
@@ -128,8 +133,8 @@ export function TransactionRow({
                 type="button"
                 onClick={() => setExpanded((v) => !v)}
                 title="Show details"
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-2 transition-colors hover:bg-canvas hover:text-foreground ${
-                  expanded ? "rotate-90" : ""
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-2 opacity-0 transition-colors group-hover:opacity-100 hover:bg-canvas hover:text-foreground ${
+                  expanded ? "rotate-90 opacity-100" : ""
                 }`}
               >
                 <ChevronRightIcon className="h-3.5 w-3.5" />
@@ -138,13 +143,13 @@ export function TransactionRow({
           </div>
         </td>
         <td
-          className={`whitespace-nowrap px-3 py-3 text-right text-[13px] font-semibold tabular-nums ${
+          className={`truncate px-3 text-right align-middle text-[13px] font-semibold tabular-nums ${
             row.amount > 0 ? "text-mint" : "text-foreground"
           }`}
         >
           {row.amount > 0 ? "+" : "-"}€{Math.abs(row.amount).toFixed(2)}
         </td>
-        <td className="px-3 py-3">
+        <td className="truncate px-3 align-middle">
           {row.isTransfer ? (
             <TransferBadge />
           ) : (
@@ -156,28 +161,26 @@ export function TransactionRow({
             />
           )}
         </td>
-        <td className="whitespace-nowrap px-3 py-3 text-[13px] text-muted">{accountName}</td>
-        <td className="whitespace-nowrap px-3 py-3 text-[13px] text-muted">{spaceName || "—"}</td>
-        <td className="px-3 py-3 text-center">
+        <td className="truncate px-3 align-middle text-[13px] text-muted">{accountName}</td>
+        <td className="truncate px-3 align-middle text-[13px] text-muted">{spaceName || "—"}</td>
+        <td className="px-3 text-center align-middle">
           <button
             type="button"
             onClick={() => onUpdate(row.id, { isRecurring: !row.isRecurring })}
             aria-pressed={row.isRecurring}
             title="Recurring"
-            className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
-              row.isRecurring
-                ? "bg-ink-solid text-white"
-                : "border border-border text-muted-2 hover:text-foreground"
+            className={`inline-flex items-center justify-center transition-opacity ${
+              row.isRecurring ? "text-violet-600 opacity-100" : "text-muted-2 opacity-40 hover:opacity-70"
             }`}
           >
-            <RefreshIcon className="h-3.5 w-3.5" />
+            <RefreshIcon className="h-4 w-4" />
           </button>
         </td>
       </tr>
       {expanded && row.rawDescription && (
         <tr className="border-b border-border bg-canvas last:border-0">
           <td />
-          <td colSpan={8} className="px-3 py-3">
+          <td colSpan={COLUMN_COUNT - 1} className="px-3 py-3">
             <RawDescriptionDetails raw={row.rawDescription} />
           </td>
         </tr>
