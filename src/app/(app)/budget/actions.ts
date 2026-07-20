@@ -19,6 +19,9 @@ export type BudgetProgressResult = {
   // Sum of spend in 'saving' categories — money that's still the user's,
   // so it's tracked separately rather than folded into totalSpent.
   totalSaved: number;
+  // Sum of budgeted amounts across 'saving' categories — the combined
+  // target, reported alongside totalSaved ("Saved €Z of €W target").
+  totalSavingTarget: number;
   // Transactions in this period with no resolvable book — excluded from
   // the totals above so a specific book's numbers are never silently
   // missing spend. Always 0 when no book is selected (book_id === null),
@@ -42,7 +45,8 @@ export async function getBudgetProgress(
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { rows: [], totalBudgeted: 0, totalSpent: 0, totalSaved: 0, unassignedCount: 0 };
+  if (!user)
+    return { rows: [], totalBudgeted: 0, totalSpent: 0, totalSaved: 0, totalSavingTarget: 0, unassignedCount: 0 };
 
   const monthKey = financialMonthBudgetKey(from);
 
@@ -98,16 +102,18 @@ export async function getBudgetProgress(
   let totalBudgeted = 0;
   let totalSpent = 0;
   let totalSaved = 0;
+  let totalSavingTarget = 0;
   for (const row of rows) {
     if (kindByCategory.get(row.categoryId) === "saving") {
       totalSaved += row.spent;
+      totalSavingTarget += row.budgeted ?? 0;
     } else {
       totalBudgeted += row.budgeted ?? 0;
       totalSpent += row.spent;
     }
   }
 
-  return { rows, totalBudgeted, totalSpent, totalSaved, unassignedCount };
+  return { rows, totalBudgeted, totalSpent, totalSaved, totalSavingTarget, unassignedCount };
 }
 
 export type CategorySuggestion = {

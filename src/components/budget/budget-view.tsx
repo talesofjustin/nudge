@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { MonthNav } from "@/components/budget/month-nav";
 import { BudgetSummary } from "@/components/budget/budget-summary";
+import { BudgetOnboarding } from "@/components/budget/budget-onboarding";
 import { CategoryProgressRow } from "@/components/budget/category-progress-row";
 import { NotBudgetedSection } from "@/components/budget/not-budgeted-section";
 import { BudgetEditSection } from "@/components/budget/budget-edit-section";
@@ -49,6 +50,9 @@ export function BudgetView({
   const [bookId, setBookId] = useState<string | null>(showBookFeature ? initialBookId : null);
   const [progress, setProgress] = useState<BudgetProgressResult>(initialProgress);
   const [loading, setLoading] = useState(false);
+  const [lastMonthSpent, setLastMonthSpent] = useState<number | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [prefillSuggestions, setPrefillSuggestions] = useState(false);
   const isFirstRender = useRef(true);
 
   const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
@@ -59,6 +63,8 @@ export function BudgetView({
     [paydayAnchorDay],
   );
   const isCurrentMonth = month.from === todayFinancialMonth.from && month.to === todayFinancialMonth.to;
+
+  const hasBudgets = progress.rows.some((r) => r.budgeted !== null);
 
   useEffect(() => {
     if (isFirstRender.current) {
@@ -77,6 +83,22 @@ export function BudgetView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, bookId]);
 
+  // Only fetched for the empty-state's "for context" line — no need to
+  // pay for this request once a budget actually exists.
+  useEffect(() => {
+    if (hasBudgets) return;
+    let cancelled = false;
+    (async () => {
+      const prevMonth = shiftFinancialMonth(month, paydayAnchorDay, "prev");
+      const prevProgress = await getBudgetProgress(prevMonth.from, prevMonth.to, bookId);
+      if (!cancelled) setLastMonthSpent(prevProgress.totalSpent);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasBudgets, month, bookId]);
+
   function navigate(direction: "prev" | "next") {
     setMonth((prev) => shiftFinancialMonth(prev, paydayAnchorDay, direction));
   }
@@ -91,6 +113,11 @@ export function BudgetView({
     await refreshProgress();
   }
 
+  function handleSetupBudgets() {
+    setPrefillSuggestions(true);
+    setEditOpen(true);
+  }
+
   const budgetedRows = progress.rows
     .filter((r) => r.budgeted !== null)
     .map((r) => ({ ...r, category: categoriesById.get(r.categoryId) }))
@@ -100,6 +127,9 @@ export function BudgetView({
       const pctB = b.budgeted! > 0 ? b.spent / b.budgeted! : b.spent > 0 ? 1 : 0;
       return pctB - pctA;
     });
+
+  const spendingRows = budgetedRows.filter((r) => r.category.kind !== "saving");
+  const savingRows = budgetedRows.filter((r) => r.category.kind === "saving");
 
   const notBudgetedItems = progress.rows
     .filter((r) => r.budgeted === null)
@@ -147,34 +177,52 @@ export function BudgetView({
           />
         </div>
 
-        <BudgetSummary
-          totalBudgeted={progress.totalBudgeted}
-          totalSpent={progress.totalSpent}
-          totalSaved={progress.totalSaved}
-          dayOfMonth={dayOfMonth}
-          totalDays={totalDays}
-          isCurrentMonth={isCurrentMonth}
-          unassignedCount={showBookFeature ? progress.unassignedCount : 0}
-        />
+        {hasBudgets ? (
+          <BudgetSummary
+            totalBudgeted={progress.totalBudgeted}
+            totalSpent={progress.totalSpent}
+            totalSaved={progress.totalSaved}
+            totalSavingTarget={progress.totalSavingTarget}
+            dayOfMonth={dayOfMonth}
+            totalDays={totalDays}
+            isCurrentMonth={isCurrentMonth}
+            unassignedCount={showBookFeature ? progress.unassignedCount : 0}
+          />
+        ) : (
+          <BudgetOnboarding lastMonthSpent={lastMonthSpent} onSetup={handleSetupBudgets} />
+        )}
 
         {loading && <p className="px-4 py-3 text-[13px] text-muted">Updating…</p>}
 
         {!loading && budgetedRows.length === 0 && notBudgetedItems.length === 0 ? (
-          <p className="px-4 py-12 text-center text-[13px] text-muted">
-            No budgets or spending recorded for this month yet.
-          </p>
+          hasBudgets && (
+            <p className="px-4 py-12 text-center text-[13px] text-muted">
+              No budgets or spending recorded for this month yet.
+            </p>
+          )
         ) : (
           <>
-            <div className="flex flex-col divide-y divide-border">
-              {budgetedRows.map((row) => (
-                <CategoryProgressRow
-                  key={row.categoryId}
-                  category={row.category}
-                  spent={row.spent}
-                  budgeted={row.budgeted!}
-                />
-              ))}
-            </div>
+            {spendingRows.length > 0 && (
+              <div>
+                <p className="px-4 pt-3 text-[11px] font-medium tracking-wide text-muted-2 uppercase">Spending</p>
+                <div className="flex flex-col divide-y divide-border">
+                  {spendingRows.map((row) => (
+                    <CategoryProgressRow key={row.categoryId} category={row.category} spent={row.spent} budgeted={row.budgeted!} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {savingRows.length > 0 && (
+              <div className="border-t border-border">
+                <p className="px-4 pt-3 text-[11px] font-medium tracking-wide text-muted-2 uppercase">Saving</p>
+                <div className="flex flex-col divide-y divide-border">
+                  {savingRows.map((row) => (
+                    <CategoryProgressRow key={row.categoryId} category={row.category} spent={row.spent} budgeted={row.budgeted!} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             <NotBudgetedSection items={notBudgetedItems} onSetBudget={handleSetBudget} />
           </>
@@ -188,6 +236,12 @@ export function BudgetView({
         monthFrom={month.from}
         monthTo={month.to}
         bookId={bookId}
+        open={editOpen}
+        onOpenChange={(next) => {
+          setEditOpen(next);
+          if (!next) setPrefillSuggestions(false);
+        }}
+        prefillSuggestions={prefillSuggestions}
         onSaved={refreshProgress}
       />
     </div>

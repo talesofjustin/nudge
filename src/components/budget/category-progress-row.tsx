@@ -13,12 +13,13 @@ export function CategoryProgressRow({
 
   // Saving categories are a target, not a limit: reaching or exceeding it
   // is the goal, so it's never shown as "over" in coral — under target is
-  // amber, reached is mint.
+  // amber, at/over target is mint with celebratory copy.
   if (category.kind === "saving") {
-    const reached = spent >= budgeted;
-    const remaining = budgeted - spent;
+    const ahead = spent - budgeted;
+    const reached = ahead >= 0;
     const trackStyle = { backgroundColor: `color-mix(in srgb, ${category.color} 15%, var(--tint-base))` };
     const fillColor = reached ? "var(--mint)" : "var(--amber)";
+    const statusLabel = ahead > 0 ? `€${ahead.toFixed(2)} ahead` : ahead === 0 ? "Target reached" : `€${Math.abs(ahead).toFixed(2)} to go`;
 
     return (
       <div className="flex items-center gap-4 px-4 py-3">
@@ -44,7 +45,7 @@ export function CategoryProgressRow({
             reached ? "text-mint" : "text-amber"
           }`}
         >
-          {reached ? "Target reached" : `€${Math.abs(remaining).toFixed(2)} to go`}
+          {statusLabel}
         </div>
       </div>
     );

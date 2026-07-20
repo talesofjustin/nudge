@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CategoryBadge, type CategoryInfo } from "@/components/transactions/category-badge";
@@ -21,6 +21,9 @@ export function BudgetEditSection({
   monthFrom,
   monthTo,
   bookId,
+  open,
+  onOpenChange,
+  prefillSuggestions = false,
   onSaved,
 }: {
   categories: CategoryInfo[];
@@ -29,25 +32,47 @@ export function BudgetEditSection({
   monthFrom: string;
   monthTo: string;
   bookId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  // True only when opened via the "Set up budgets" onboarding action — pre-
+  // fills every category's draft with its suggested amount so it's visibly
+  // ready to accept, rather than making the user open each suggestion by
+  // hand. A normal manual re-open never overwrites existing drafts this way.
+  prefillSuggestions?: boolean;
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<Map<string, CategorySuggestion> | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [drafts, setDrafts] = useState<Map<string, string>>(new Map());
   const [copying, setCopying] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [hasPrefilled, setHasPrefilled] = useState(false);
 
-  async function handleToggleOpen() {
-    const next = !open;
-    setOpen(next);
-    if (next && suggestions === null) {
+  useEffect(() => {
+    if (!open || suggestions !== null || loadingSuggestions) return;
+    (async () => {
       setLoadingSuggestions(true);
       const result = await getBudgetSuggestions(monthFrom, monthTo, bookId);
       setSuggestions(new Map(result.map((s) => [s.categoryId, s])));
       setLoadingSuggestions(false);
-    }
-  }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!prefillSuggestions || !suggestions || hasPrefilled) return;
+    (() => {
+      setDrafts((prev) => {
+        const next = new Map(prev);
+        for (const [categoryId, suggestion] of suggestions) {
+          if (!budgetsByCategory.has(categoryId)) next.set(categoryId, suggestion.average.toFixed(2));
+        }
+        return next;
+      });
+      setHasPrefilled(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestions, prefillSuggestions, hasPrefilled]);
 
   function draftValue(categoryId: string): string {
     if (drafts.has(categoryId)) return drafts.get(categoryId)!;
@@ -110,7 +135,7 @@ export function BudgetEditSection({
     <div className="shadow-soft mt-5 overflow-hidden rounded-xl border border-border bg-surface">
       <button
         type="button"
-        onClick={handleToggleOpen}
+        onClick={() => onOpenChange(!open)}
         className="flex w-full items-center justify-between px-4 py-3.5 text-left"
       >
         <span className="text-[14px] font-semibold text-foreground">Edit budgets</span>

@@ -16,8 +16,9 @@
 // 20260720134127_add_transaction_time_precision.sql,
 // 20260720134156_add_counterparty_iban.sql,
 // 20260720134216_add_category_kind.sql,
-// 20260720134233_add_category_source_and_reviewed_at.sql, and
-// 20260720134316_add_recurring_groups.sql. Shaped the way
+// 20260720134233_add_category_source_and_reviewed_at.sql,
+// 20260720134316_add_recurring_groups.sql, and
+// 20260720155442_add_recurring_group_status.sql. Shaped the way
 // `supabase gen types typescript` would produce it, so running that command
 // later (once the migrations have been applied) is a drop-in replacement for
 // this file. `Relationships` is left empty here (no typed nested-select
@@ -28,6 +29,7 @@ export type DecimalSeparator = "period" | "comma";
 export type ThemePreference = "light" | "dark" | "system";
 export type CategoryKind = "spending" | "saving";
 export type CategorySource = "manual" | "auto";
+export type RecurringGroupStatus = "detected" | "confirmed" | "dismissed";
 
 // Saved on accounts.column_mapping — mirrors ColumnMapping in lib/csv.ts
 // plus the locale/expense-value choices made alongside it on first import.
@@ -194,6 +196,7 @@ export type Database = {
           label: string;
           interval_days: number;
           typical_amount: number;
+          status: RecurringGroupStatus;
           created_at: string;
           updated_at: string;
         };
@@ -204,6 +207,7 @@ export type Database = {
           label: string;
           interval_days: number;
           typical_amount: number;
+          status?: RecurringGroupStatus;
           created_at?: string;
           updated_at?: string;
         };
@@ -214,6 +218,7 @@ export type Database = {
           label?: string;
           interval_days?: number;
           typical_amount?: number;
+          status?: RecurringGroupStatus;
           created_at?: string;
           updated_at?: string;
         };

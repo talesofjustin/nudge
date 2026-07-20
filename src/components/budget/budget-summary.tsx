@@ -2,6 +2,7 @@ export function BudgetSummary({
   totalBudgeted,
   totalSpent,
   totalSaved,
+  totalSavingTarget,
   dayOfMonth,
   totalDays,
   isCurrentMonth,
@@ -10,6 +11,7 @@ export function BudgetSummary({
   totalBudgeted: number;
   totalSpent: number;
   totalSaved: number;
+  totalSavingTarget: number;
   dayOfMonth: number;
   totalDays: number;
   isCurrentMonth: boolean;
@@ -19,40 +21,19 @@ export function BudgetSummary({
 
   return (
     <div className="border-b border-border px-4 py-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex gap-7">
-          <div>
-            <p className="text-[11px] font-medium tracking-wide text-muted uppercase">Budgeted</p>
-            <p className="mt-0.5 text-[20px] font-semibold text-foreground tabular-nums">
-              €{totalBudgeted.toFixed(2)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-medium tracking-wide text-muted uppercase">Spent</p>
-            <p className="mt-0.5 text-[20px] font-semibold text-foreground tabular-nums">
-              €{totalSpent.toFixed(2)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-medium tracking-wide text-muted uppercase">Remaining</p>
-            <p
-              className={`mt-0.5 text-[20px] font-semibold tabular-nums ${
-                remaining >= 0 ? "text-mint" : "text-coral"
-              }`}
-            >
-              {remaining >= 0 ? "€" : "-€"}
-              {Math.abs(remaining).toFixed(2)}
-            </p>
-          </div>
-          {totalSaved > 0 && (
-            <div>
-              <p className="text-[11px] font-medium tracking-wide text-muted uppercase">Saved</p>
-              <p className="mt-0.5 text-[20px] font-semibold text-mint tabular-nums">
-                €{totalSaved.toFixed(2)}
-              </p>
-            </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[15px] text-foreground">
+          Spent <span className="font-semibold tabular-nums">€{totalSpent.toFixed(2)}</span> of €
+          {totalBudgeted.toFixed(2)} budgeted
+          {totalSavingTarget > 0 && (
+            <>
+              {" "}
+              · Saved{" "}
+              <span className="font-semibold tabular-nums text-mint">€{totalSaved.toFixed(2)}</span> of €
+              {totalSavingTarget.toFixed(2)} target
+            </>
           )}
-        </div>
+        </p>
 
         {isCurrentMonth && (
           <p className="text-[13px] text-muted">
@@ -60,6 +41,10 @@ export function BudgetSummary({
           </p>
         )}
       </div>
+
+      <p className={`mt-1.5 text-[13px] font-medium ${remaining >= 0 ? "text-mint" : "text-coral"}`}>
+        {remaining >= 0 ? `€${remaining.toFixed(2)} remaining` : `€${Math.abs(remaining).toFixed(2)} over budget`}
+      </p>
 
       {/* Only surfaces once book-scoping is actually in effect (>1 book) —
           otherwise there's no book for a transaction to be missing. */}

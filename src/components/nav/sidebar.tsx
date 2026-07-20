@@ -11,6 +11,7 @@ import {
   TargetIcon,
   UploadIcon,
 } from "@/components/icons/dashboard-icons";
+import { RefreshIcon } from "@/components/icons/category-icons";
 import { GridIcon, ListIcon } from "@/components/icons/nav-icons";
 import type { ThemePreference } from "@/lib/supabase/database.types";
 
@@ -22,6 +23,7 @@ const NAV_ITEMS: {
   { href: "/dashboard", label: "Dashboard", icon: GridIcon },
   { href: "/import", label: "Import", icon: UploadIcon },
   { href: "/transactions", label: "Transactions", icon: ListIcon },
+  { href: "/recurring", label: "Recurring", icon: RefreshIcon },
   { href: "/budget", label: "Budget", icon: TargetIcon },
   { href: "/wishlist", label: "Wishlist", icon: HeartIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },

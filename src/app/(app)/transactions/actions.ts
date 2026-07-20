@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildOwnAccountSet, isTransferRecipient, normalizeRecipient } from "@/lib/known-recipients";
 import { identityKey, normalizeIban } from "@/lib/counterparty-identity";
 import { upsertUserSettings } from "@/lib/user-settings";
+import { setTransactionRecurring } from "@/lib/recurring";
 import type { CategoryKind } from "@/lib/supabase/database.types";
 
 export async function dismissBookSuggestion(): Promise<{ success: boolean }> {
@@ -243,6 +244,14 @@ export async function updateTransaction(
     return { success: false, error: "You must be logged in." };
   }
 
+  // Recurring is routed through its own helper: flagging a transaction by
+  // hand is a confirmation, which needs to create/attach a recurring
+  // group, not just flip a column.
+  if (updates.isRecurring !== undefined) {
+    const res = await setTransactionRecurring(user.id, id, updates.isRecurring);
+    if (!res.success) return { success: false, error: "Could not update recurring status." };
+  }
+
   const { error } = await supabase
     .from("transactions")
     .update({
@@ -250,7 +259,6 @@ export async function updateTransaction(
       ...(updates.categoryId !== undefined && { category_id: updates.categoryId }),
       ...(updates.categorySource !== undefined && { category_source: updates.categorySource }),
       ...(updates.reviewedAt !== undefined && { reviewed_at: updates.reviewedAt }),
-      ...(updates.isRecurring !== undefined && { is_recurring: updates.isRecurring }),
       ...(updates.bookId !== undefined && { book_id: updates.bookId }),
     })
     .eq("id", id);
