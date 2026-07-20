@@ -59,9 +59,16 @@ export function SettingsForm({ settings }: { settings: UserSettings }) {
 
   return (
     <Card className="flex max-w-lg flex-col gap-8">
+      <div>
+        <h2 className="text-[15px] font-semibold text-ink">Preferences</h2>
+        <p className="mt-1 text-[13px] text-muted">
+          Locale and timing defaults used across imports and summaries.
+        </p>
+      </div>
+
       <div className="flex flex-col gap-3">
         <div>
-          <h2 className="text-[15px] font-semibold text-ink">Decimal separator</h2>
+          <h3 className="text-[13.5px] font-semibold text-foreground">Decimal separator</h3>
           <p className="mt-1 text-[13px] text-muted">
             Used when reading amounts from imported CSV files.
           </p>
@@ -90,7 +97,7 @@ export function SettingsForm({ settings }: { settings: UserSettings }) {
 
       <div className="flex flex-col gap-3">
         <div>
-          <h2 className="text-[15px] font-semibold text-ink">Timezone</h2>
+          <h3 className="text-[13.5px] font-semibold text-foreground">Timezone</h3>
           <p className="mt-1 text-[13px] text-muted">
             Used to interpret dates from imported CSV files correctly.
           </p>
@@ -108,7 +115,7 @@ export function SettingsForm({ settings }: { settings: UserSettings }) {
 
       <div className="flex flex-col gap-3">
         <div>
-          <h2 className="text-[15px] font-semibold text-ink">Payday anchor day</h2>
+          <h3 className="text-[13.5px] font-semibold text-foreground">Payday anchor day</h3>
           <p className="mt-1 text-[13px] text-muted">
             Used to align monthly summaries with your payday instead of the calendar month.
             Leave blank to use the 1st of the month.

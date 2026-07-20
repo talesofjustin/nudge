@@ -33,7 +33,12 @@ type Props = {
   timezone: string;
   defaultDecimalSeparator: DecimalSeparator | null;
   onBack: () => void;
-  onConfirm: (validRows: ImportRow[], skippedCount: number) => void;
+  onConfirm: (
+    validRows: ImportRow[],
+    skippedCount: number,
+    decimalSeparator: DecimalSeparator,
+    expenseValue: string | null,
+  ) => void;
   submitError: string | null;
 };
 
@@ -217,6 +222,8 @@ export function MappingStep({
                 description: r.description,
               })),
               skippedCount,
+              decimalSeparator,
+              expenseValue,
             )
           }
         >

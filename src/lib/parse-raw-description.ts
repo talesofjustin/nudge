@@ -16,14 +16,31 @@ const KNOWN_KEYS = [
   "Valutadatum",
 ];
 
-const KEY_PATTERN = new RegExp(`(${KNOWN_KEYS.join("|")}):\\s*`, "g");
+// Case-insensitive: real exports aren't perfectly consistent about casing,
+// and a missed match here is exactly what causes the "only one field
+// shows" bug (see below).
+const KEY_PATTERN = new RegExp(`(${KNOWN_KEYS.join("|")}):\\s*`, "gi");
+
+// Text before the first recognized key is currently discarded outright —
+// if a transaction's actual label text doesn't match our known list (a
+// different template, a typo, unexpected casing we still missed), whatever
+// came before the first key we DID recognize vanishes silently, and the
+// user is left looking at a single stray field like "Valutadatum" with no
+// indication that more was there. A little boilerplate prefix (e.g. "SEPA
+// Overboeking") is normal and fine to drop; anything longer means we're
+// probably missing real content, so we bail out to the raw-text fallback
+// instead of presenting a confidently-wrong, near-empty panel.
+const MAX_UNRECOGNIZED_PREFIX = 20;
 
 // Returns labeled fields when the raw text matches the known key:value
-// pattern, or null when it doesn't (callers should fall back to showing the
-// raw text as-is).
+// pattern with reasonable confidence, or null when it doesn't (callers
+// should fall back to showing the raw text as-is).
 export function parseRawDescription(raw: string): ParsedDescriptionField[] | null {
   const matches = [...raw.matchAll(KEY_PATTERN)];
   if (matches.length === 0) return null;
+
+  const leadingText = raw.slice(0, matches[0].index ?? 0).trim();
+  if (leadingText.length > MAX_UNRECOGNIZED_PREFIX) return null;
 
   const fields: ParsedDescriptionField[] = [];
   for (let i = 0; i < matches.length; i++) {

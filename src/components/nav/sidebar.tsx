@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
-import { logout } from "@/app/logout/actions";
 import { Wordmark } from "@/components/ui/wordmark";
+import { ProfileMenu } from "@/components/nav/profile-menu";
 import {
   HeartIcon,
   SettingsIcon,
@@ -12,6 +12,7 @@ import {
   UploadIcon,
 } from "@/components/icons/dashboard-icons";
 import { GridIcon, ListIcon } from "@/components/icons/nav-icons";
+import type { ThemePreference } from "@/lib/supabase/database.types";
 
 const NAV_ITEMS: {
   href: string;
@@ -26,7 +27,13 @@ const NAV_ITEMS: {
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  email,
+  theme,
+}: {
+  email: string;
+  theme: ThemePreference;
+}) {
   const pathname = usePathname();
 
   return (
@@ -58,14 +65,9 @@ export function Sidebar() {
 
       {/* Extra bottom clearance: Next.js's dev-mode indicator badge floats
           over this corner and would otherwise overlap the button. */}
-      <form action={logout} className="mt-auto px-3.5 pb-10">
-        <button
-          type="submit"
-          className="text-[13px] font-medium text-muted transition-colors hover:text-foreground"
-        >
-          Log out
-        </button>
-      </form>
+      <div className="mt-auto px-1 pb-10">
+        <ProfileMenu email={email} initialTheme={theme} />
+      </div>
     </aside>
   );
 }

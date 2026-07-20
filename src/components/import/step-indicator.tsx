@@ -1,11 +1,10 @@
 import { CheckIcon } from "@/components/icons/dashboard-icons";
 
-export type Step = "upload" | "account" | "mapping" | "review" | "done";
+export type Step = "account" | "upload" | "review" | "done";
 
 const STEPS: { key: Step; label: string }[] = [
-  { key: "upload", label: "Upload" },
   { key: "account", label: "Account" },
-  { key: "mapping", label: "Map columns" },
+  { key: "upload", label: "Upload" },
   { key: "review", label: "Review" },
   { key: "done", label: "Done" },
 ];
@@ -42,9 +41,7 @@ export function StepIndicator({ step }: { step: Step }) {
               </span>
             </div>
             {!isLast && (
-              <div
-                className={`mx-3 h-px flex-1 ${isComplete ? "bg-violet-400" : "bg-border"}`}
-              />
+              <div className={`mx-3 h-px flex-1 ${isComplete ? "bg-violet-400" : "bg-border"}`} />
             )}
           </div>
         );

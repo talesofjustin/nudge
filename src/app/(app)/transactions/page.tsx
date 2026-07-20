@@ -4,6 +4,7 @@ import { getUserSettings } from "@/lib/user-settings";
 import { parseFiltersFromParams, type SearchParamsInput } from "@/lib/transaction-filters";
 import { getFilteredTransactions } from "@/app/(app)/transactions/actions";
 import { TransactionsView } from "@/components/transactions/transactions-view";
+import { ReactiveBookSuggestion } from "@/components/transactions/reactive-book-suggestion";
 
 export default async function TransactionsPage({
   searchParams,
@@ -16,14 +17,14 @@ export default async function TransactionsPage({
   const defaultRange = getPresetRange("month", settings.paydayAnchorDay);
   const filters = parseFiltersFromParams(params, defaultRange);
 
-  const [{ data: accounts }, { data: spaces }, { data: categories }, transactionsResult] =
+  const [{ data: accounts }, { data: books }, { data: categories }, transactionsResult] =
     await Promise.all([
       supabase
         .from("accounts")
         .select("id, name")
         .order("created_at", { ascending: true }),
       supabase
-        .from("spaces")
+        .from("books")
         .select("id, name")
         .order("created_at", { ascending: true }),
       supabase
@@ -31,7 +32,7 @@ export default async function TransactionsPage({
         .select("id, name, color, icon")
         .order("created_at", { ascending: true }),
       getFilteredTransactions({
-        spaceId: filters.spaceId,
+        bookId: filters.bookId,
         accountId: filters.accountId,
         categoryIds: filters.categoryIds,
         amountMin: filters.amountMin.trim() ? Number(filters.amountMin) : null,
@@ -44,6 +45,12 @@ export default async function TransactionsPage({
 
   const initialRows = transactionsResult.success ? transactionsResult.rows : [];
 
+  // Reactive introduction (section 14): only offered pre-books, only once
+  // there are enough accounts for a split to plausibly matter, and never
+  // again after a dismissal.
+  const showBookSuggestion =
+    (books?.length ?? 0) <= 1 && (accounts?.length ?? 0) >= 2 && !settings.bookSuggestionDismissed;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="pl-6">
@@ -53,9 +60,11 @@ export default async function TransactionsPage({
         </p>
       </div>
 
+      {showBookSuggestion && <ReactiveBookSuggestion />}
+
       <TransactionsView
         accounts={accounts ?? []}
-        spaces={spaces ?? []}
+        books={books ?? []}
         categories={categories ?? []}
         initialRows={initialRows}
         initialFilters={filters}

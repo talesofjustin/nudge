@@ -1,13 +1,15 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import type { DecimalSeparator } from "@/lib/supabase/database.types";
+import type { DecimalSeparator, ThemePreference } from "@/lib/supabase/database.types";
 
 export type UserSettings = {
   decimalSeparator: DecimalSeparator | null;
   timezone: string | null;
   paydayAnchorDay: number | null;
   budgetTipDismissed: boolean;
+  theme: ThemePreference | null;
+  bookSuggestionDismissed: boolean;
 };
 
 export async function getUserSettings(): Promise<UserSettings> {
@@ -17,12 +19,21 @@ export async function getUserSettings(): Promise<UserSettings> {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { decimalSeparator: null, timezone: null, paydayAnchorDay: null, budgetTipDismissed: false };
+    return {
+      decimalSeparator: null,
+      timezone: null,
+      paydayAnchorDay: null,
+      budgetTipDismissed: false,
+      theme: null,
+      bookSuggestionDismissed: false,
+    };
   }
 
   const { data } = await supabase
     .from("user_settings")
-    .select("decimal_separator, timezone, payday_anchor_day, budget_tip_dismissed")
+    .select(
+      "decimal_separator, timezone, payday_anchor_day, budget_tip_dismissed, theme, book_suggestion_dismissed",
+    )
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -31,6 +42,8 @@ export async function getUserSettings(): Promise<UserSettings> {
     timezone: data?.timezone ?? null,
     paydayAnchorDay: data?.payday_anchor_day ?? null,
     budgetTipDismissed: data?.budget_tip_dismissed ?? false,
+    theme: data?.theme ?? null,
+    bookSuggestionDismissed: data?.book_suggestion_dismissed ?? false,
   };
 }
 
@@ -42,6 +55,8 @@ export async function upsertUserSettings(
     timezone: string;
     paydayAnchorDay: number | null;
     budgetTipDismissed: boolean;
+    theme: ThemePreference;
+    bookSuggestionDismissed: boolean;
   }>,
 ): Promise<{ success: boolean }> {
   const supabase = await createClient();
@@ -63,6 +78,10 @@ export async function upsertUserSettings(
       }),
       ...(partial.budgetTipDismissed !== undefined && {
         budget_tip_dismissed: partial.budgetTipDismissed,
+      }),
+      ...(partial.theme !== undefined && { theme: partial.theme }),
+      ...(partial.bookSuggestionDismissed !== undefined && {
+        book_suggestion_dismissed: partial.bookSuggestionDismissed,
       }),
       updated_at: new Date().toISOString(),
     },

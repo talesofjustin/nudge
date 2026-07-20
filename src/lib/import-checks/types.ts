@@ -33,7 +33,9 @@ export type FlagAction = {
 export type FlagItem = {
   id: string;
   label: string;
-  actions: FlagAction[];
+  // Omit when the review step renders this item with bespoke UI instead of
+  // the generic button list (e.g. book-assignment's picker + checkbox).
+  actions?: FlagAction[];
   data?: Record<string, string>;
 };
 

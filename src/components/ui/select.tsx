@@ -22,7 +22,7 @@ export function Select({
     <SelectPrimitive.Root {...props}>
       <SelectPrimitive.Trigger
         aria-labelledby={label ? labelId : undefined}
-        className={`flex h-11 w-full items-center justify-between gap-2 rounded-2xl border border-border bg-canvas px-3.5 text-[15px] text-foreground outline-none transition-[color,background-color,border-color,box-shadow] data-[placeholder]:text-muted-2 data-[state=open]:border-violet-400 data-[state=open]:bg-surface data-[state=open]:shadow-[0_0_0_3px_var(--violet-200)] ${className}`}
+        className={`flex h-9 w-full items-center justify-between gap-2 rounded-xl border border-border bg-canvas px-3 text-[13.5px] text-foreground outline-none transition-[color,background-color,border-color,box-shadow] data-[placeholder]:text-muted-2 data-[state=open]:border-violet-400 data-[state=open]:bg-surface data-[state=open]:shadow-[0_0_0_3px_var(--violet-200)] ${className}`}
       >
         <SelectPrimitive.Value placeholder={placeholder} />
         <SelectPrimitive.Icon>
@@ -33,13 +33,13 @@ export function Select({
         <SelectPrimitive.Content
           position="popper"
           sideOffset={6}
-          className="shadow-soft z-50 w-(--radix-select-trigger-width) overflow-hidden rounded-2xl border border-border bg-surface"
+          className="shadow-soft z-50 w-(--radix-select-trigger-width) overflow-hidden rounded-xl border border-border bg-surface"
         >
-          {/* Fixed max-height (never taller than 18rem) so long lists scroll
+          {/* Fixed max-height (never taller than 16rem) so long lists scroll
               inside the panel instead of stretching the page — but still
               capped by the actual available space so it never overflows
               past the viewport edge either. */}
-          <SelectPrimitive.Viewport className="max-h-[min(18rem,var(--radix-select-content-available-height))] overflow-y-auto p-1">
+          <SelectPrimitive.Viewport className="max-h-[min(16rem,var(--radix-select-content-available-height))] overflow-y-auto p-1">
             {children}
           </SelectPrimitive.Viewport>
         </SelectPrimitive.Content>
@@ -69,7 +69,7 @@ export function SelectItem({
   return (
     <SelectPrimitive.Item
       value={value}
-      className="relative flex h-9 cursor-pointer select-none items-center rounded-xl px-3 pr-8 text-[14px] text-foreground outline-none data-[highlighted]:bg-canvas data-[highlighted]:outline-none"
+      className="relative flex h-8 cursor-pointer select-none items-center rounded-lg px-2.5 pr-7 text-[13px] text-foreground outline-none data-[highlighted]:bg-canvas data-[highlighted]:outline-none"
     >
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
       <SelectPrimitive.ItemIndicator className="absolute right-2.5 flex items-center">

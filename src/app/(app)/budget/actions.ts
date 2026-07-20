@@ -15,29 +15,51 @@ export type BudgetProgressResult = {
   rows: CategoryProgressData[];
   totalBudgeted: number;
   totalSpent: number;
+  // Transactions in this period with no resolvable book — excluded from
+  // the totals above so a specific book's numbers are never silently
+  // missing spend. Always 0 when no book is selected (book_id === null),
+  // since there's nothing to exclude by.
+  unassignedCount: number;
 };
 
 // Spend excludes transfers (flagged recipients) and uncategorized rows (the
 // existing "categorize before it counts" rule), and only counts expenses —
-// income landing in a category (e.g. Salary) isn't "spend" against a budget.
-export async function getBudgetProgress(from: string, to: string): Promise<BudgetProgressResult> {
+// income landing in a category (e.g. Salary) isn't "spend" against a
+// budget. `bookId` null means "no book selected" (global budget, used by
+// accounts with zero/one book) — everything counts, book_id isn't
+// filtered at all. A specific bookId scopes spend to exactly that book.
+export async function getBudgetProgress(
+  from: string,
+  to: string,
+  bookId: string | null,
+): Promise<BudgetProgressResult> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { rows: [], totalBudgeted: 0, totalSpent: 0 };
+  if (!user) return { rows: [], totalBudgeted: 0, totalSpent: 0, unassignedCount: 0 };
 
   const monthKey = financialMonthBudgetKey(from);
 
+  let txQuery = supabase
+    .from("transactions")
+    .select("category_id, amount, recipient, book_id")
+    .eq("user_id", user.id)
+    .gte("occurred_at", from)
+    .lte("occurred_at", `${to}T23:59:59`);
+  if (bookId) txQuery = txQuery.eq("book_id", bookId);
+
+  let budgetQuery = supabase
+    .from("budgets")
+    .select("category_id, amount")
+    .eq("user_id", user.id)
+    .eq("month", monthKey);
+  budgetQuery = bookId ? budgetQuery.eq("book_id", bookId) : budgetQuery.is("book_id", null);
+
   const [{ data: txs }, { data: budgetRows }, { data: known }] = await Promise.all([
-    supabase
-      .from("transactions")
-      .select("category_id, amount, recipient")
-      .eq("user_id", user.id)
-      .gte("occurred_at", from)
-      .lte("occurred_at", `${to}T23:59:59`),
-    supabase.from("budgets").select("category_id, amount").eq("user_id", user.id).eq("month", monthKey),
+    txQuery,
+    budgetQuery,
     supabase.from("known_recipients").select("recipient, is_own_account").eq("user_id", user.id),
   ]);
 
@@ -46,7 +68,9 @@ export async function getBudgetProgress(from: string, to: string): Promise<Budge
   );
 
   const spentByCategory = new Map<string, number>();
+  let unassignedCount = 0;
   for (const tx of txs ?? []) {
+    if (bookId && !tx.book_id) unassignedCount++;
     if (!tx.category_id) continue;
     if (tx.amount >= 0) continue;
     if (isTransferRecipient(tx.recipient, ownAccountSet)) continue;
@@ -68,7 +92,7 @@ export async function getBudgetProgress(from: string, to: string): Promise<Budge
   const totalBudgeted = rows.reduce((sum, r) => sum + (r.budgeted ?? 0), 0);
   const totalSpent = rows.reduce((sum, r) => sum + r.spent, 0);
 
-  return { rows, totalBudgeted, totalSpent };
+  return { rows, totalBudgeted, totalSpent, unassignedCount };
 }
 
 export type CategorySuggestion = {
@@ -78,13 +102,14 @@ export type CategorySuggestion = {
 };
 
 // Averages spend over the up-to-3 financial months immediately preceding
-// the given one. "monthsUsed" reflects how many of those months the
-// account actually has any transaction history for (not just this
-// category), so a brand-new account doesn't get a misleadingly confident
-// "avg last 3 months" built mostly from zeros.
+// the given one, scoped to the same book. "monthsUsed" reflects how many
+// of those months the account actually has any transaction history for
+// (not just this category), so a brand-new account doesn't get a
+// misleadingly confident "avg last 3 months" built mostly from zeros.
 export async function getBudgetSuggestions(
   currentFrom: string,
   currentTo: string,
+  bookId: string | null,
 ): Promise<CategorySuggestion[]> {
   const supabase = await createClient();
   const {
@@ -106,13 +131,16 @@ export async function getBudgetSuggestions(
   const earliestFrom = priorMonths[priorMonths.length - 1].from;
   const latestTo = priorMonths[0].to;
 
+  let txQuery = supabase
+    .from("transactions")
+    .select("category_id, amount, occurred_at, recipient")
+    .eq("user_id", user.id)
+    .gte("occurred_at", earliestFrom)
+    .lte("occurred_at", `${latestTo}T23:59:59`);
+  if (bookId) txQuery = txQuery.eq("book_id", bookId);
+
   const [{ data: txs }, { data: known }] = await Promise.all([
-    supabase
-      .from("transactions")
-      .select("category_id, amount, occurred_at, recipient")
-      .eq("user_id", user.id)
-      .gte("occurred_at", earliestFrom)
-      .lte("occurred_at", `${latestTo}T23:59:59`),
+    txQuery,
     supabase.from("known_recipients").select("recipient, is_own_account").eq("user_id", user.id),
   ]);
 
@@ -147,10 +175,33 @@ export async function getBudgetSuggestions(
   }));
 }
 
+// Plain upsert can't rely on ON CONFLICT here: Postgres treats every NULL
+// book_id as distinct, so two "global" budget rows for the same category+
+// month wouldn't collide via a unique constraint. A select-then-write
+// avoids that pitfall entirely regardless of whether bookId is set.
+async function findBudgetId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  bookId: string | null,
+  categoryId: string,
+  monthKey: string,
+): Promise<string | null> {
+  let query = supabase
+    .from("budgets")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("category_id", categoryId)
+    .eq("month", monthKey);
+  query = bookId ? query.eq("book_id", bookId) : query.is("book_id", null);
+  const { data } = await query.maybeSingle();
+  return data?.id ?? null;
+}
+
 export async function upsertBudget(
   monthKey: string,
   categoryId: string,
   amount: number,
+  bookId: string | null,
 ): Promise<{ success: boolean }> {
   const supabase = await createClient();
   const {
@@ -159,12 +210,13 @@ export async function upsertBudget(
 
   if (!user) return { success: false };
 
-  const { error } = await supabase
-    .from("budgets")
-    .upsert(
-      { user_id: user.id, category_id: categoryId, month: monthKey, amount },
-      { onConflict: "user_id,category_id,month" },
-    );
+  const existingId = await findBudgetId(supabase, user.id, bookId, categoryId, monthKey);
+
+  const { error } = existingId
+    ? await supabase.from("budgets").update({ amount }).eq("id", existingId)
+    : await supabase
+        .from("budgets")
+        .insert({ user_id: user.id, book_id: bookId, category_id: categoryId, month: monthKey, amount });
 
   return { success: !error };
 }
@@ -172,6 +224,7 @@ export async function upsertBudget(
 export async function deleteBudget(
   monthKey: string,
   categoryId: string,
+  bookId: string | null,
 ): Promise<{ success: boolean }> {
   const supabase = await createClient();
   const {
@@ -180,19 +233,22 @@ export async function deleteBudget(
 
   if (!user) return { success: false };
 
-  const { error } = await supabase
+  let query = supabase
     .from("budgets")
     .delete()
     .eq("user_id", user.id)
     .eq("category_id", categoryId)
     .eq("month", monthKey);
+  query = bookId ? query.eq("book_id", bookId) : query.is("book_id", null);
 
+  const { error } = await query;
   return { success: !error };
 }
 
 export async function copyLastMonthBudgets(
   currentFrom: string,
   currentTo: string,
+  bookId: string | null,
 ): Promise<{ success: boolean; count: number }> {
   const supabase = await createClient();
   const {
@@ -206,27 +262,26 @@ export async function copyLastMonthBudgets(
   const prevMonthKey = financialMonthBudgetKey(prevMonth.from);
   const currentMonthKey = financialMonthBudgetKey(currentFrom);
 
-  const { data: prevBudgets } = await supabase
+  let prevQuery = supabase
     .from("budgets")
     .select("category_id, amount")
     .eq("user_id", user.id)
     .eq("month", prevMonthKey);
+  prevQuery = bookId ? prevQuery.eq("book_id", bookId) : prevQuery.is("book_id", null);
+  const { data: prevBudgets } = await prevQuery;
 
   if (!prevBudgets || prevBudgets.length === 0) {
     return { success: true, count: 0 };
   }
 
-  const { error } = await supabase.from("budgets").upsert(
-    prevBudgets.map((b) => ({
-      user_id: user.id,
-      category_id: b.category_id,
-      month: currentMonthKey,
-      amount: b.amount,
-    })),
-    { onConflict: "user_id,category_id,month" },
-  );
+  let failed = false;
+  for (const b of prevBudgets) {
+    const res = await upsertBudget(currentMonthKey, b.category_id, b.amount, bookId);
+    if (!res.success) failed = true;
+  }
+  void currentMonthKey;
 
-  return { success: !error, count: prevBudgets.length };
+  return { success: !failed, count: prevBudgets.length };
 }
 
 export async function dismissBudgetTip(): Promise<{ success: boolean }> {

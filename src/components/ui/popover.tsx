@@ -22,7 +22,7 @@ export function PopoverContent({
       <PopoverPrimitive.Content
         align={align}
         sideOffset={sideOffset}
-        className={`shadow-soft z-50 rounded-2xl border border-border bg-surface p-3 outline-none ${className}`}
+        className={`shadow-soft z-50 rounded-xl border border-border bg-surface p-2.5 outline-none ${className}`}
       >
         {children}
       </PopoverPrimitive.Content>

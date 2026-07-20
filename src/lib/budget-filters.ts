@@ -20,9 +20,14 @@ export function parseBudgetMonthFromParams(
   };
 }
 
-export function budgetMonthToSearchParams(month: BudgetMonth): URLSearchParams {
+export function parseBudgetBookFromParams(params: SearchParamsInput): string | null {
+  return firstValue(params.book);
+}
+
+export function budgetSearchParams(month: BudgetMonth, bookId: string | null): URLSearchParams {
   const params = new URLSearchParams();
   params.set("from", month.from);
   params.set("to", month.to);
+  if (bookId) params.set("book", bookId);
   return params;
 }

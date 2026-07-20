@@ -4,7 +4,7 @@ export type FiltersState = {
   period: DatePreset | "custom";
   dateFrom: string;
   dateTo: string;
-  spaceId: string | null;
+  bookId: string | null;
   accountId: string | null;
   categoryIds: string[];
   amountMin: string;
@@ -40,7 +40,7 @@ export function parseFiltersFromParams(
     period,
     dateFrom: firstValue(params.from) ?? defaultRange.from,
     dateTo: firstValue(params.to) ?? defaultRange.to,
-    spaceId: firstValue(params.space),
+    bookId: firstValue(params.book),
     accountId: firstValue(params.account),
     categoryIds: categoriesRaw ? categoriesRaw.split(",").filter(Boolean) : [],
     amountMin: firstValue(params.amountMin) ?? "",
@@ -54,7 +54,7 @@ export function filtersToSearchParams(filters: FiltersState): URLSearchParams {
   params.set("period", filters.period);
   params.set("from", filters.dateFrom);
   params.set("to", filters.dateTo);
-  if (filters.spaceId) params.set("space", filters.spaceId);
+  if (filters.bookId) params.set("book", filters.bookId);
   if (filters.accountId) params.set("account", filters.accountId);
   if (filters.categoryIds.length > 0) params.set("categories", filters.categoryIds.join(","));
   if (filters.amountMin) params.set("amountMin", filters.amountMin);

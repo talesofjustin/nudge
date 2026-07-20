@@ -1,32 +1,30 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserSettings } from "@/lib/user-settings";
+import { getImportAccounts } from "@/app/(app)/import/actions";
 import { ImportWizard } from "@/components/import/import-wizard";
 import { ImportHistory } from "@/components/import/import-history";
 
 export default async function ImportPage() {
   const supabase = await createClient();
 
-  const [{ data: accounts }, { data: spaces }, settings, { data: imports }] =
-    await Promise.all([
-      supabase
-        .from("accounts")
-        .select("id, name, type")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("spaces")
-        .select("id, name")
-        .order("created_at", { ascending: true }),
-      getUserSettings(),
-      supabase
-        .from("imports")
-        .select(
-          "id, filename, row_count, skipped_count, statement_start_date, statement_end_date, created_at, account_id, space_id",
-        )
-        .order("created_at", { ascending: false }),
-    ]);
+  const [accounts, { data: books }, settings, { data: imports }] = await Promise.all([
+    getImportAccounts(),
+    supabase
+      .from("books")
+      .select("id, name")
+      .order("created_at", { ascending: true }),
+    getUserSettings(),
+    supabase
+      .from("imports")
+      .select(
+        "id, filename, row_count, skipped_count, statement_start_date, statement_end_date, created_at, account_id, book_id",
+      )
+      .order("created_at", { ascending: false }),
+  ]);
 
-  const accountsById = new Map((accounts ?? []).map((a) => [a.id, a.name]));
-  const spacesById = new Map((spaces ?? []).map((s) => [s.id, s.name]));
+  const showBookFeature = (books?.length ?? 0) > 1;
+  const accountsById = new Map(accounts.map((a) => [a.id, a.name]));
+  const booksById = new Map((books ?? []).map((b) => [b.id, b.name]));
   const importHistory = (imports ?? []).map((imp) => ({
     id: imp.id,
     filename: imp.filename,
@@ -34,7 +32,7 @@ export default async function ImportPage() {
     skippedCount: imp.skipped_count,
     createdAt: imp.created_at,
     accountName: accountsById.get(imp.account_id) ?? "Unknown account",
-    spaceName: imp.space_id ? (spacesById.get(imp.space_id) ?? null) : null,
+    bookName: imp.book_id ? (booksById.get(imp.book_id) ?? null) : null,
     statementStartDate: imp.statement_start_date,
     statementEndDate: imp.statement_end_date,
   }));
@@ -50,9 +48,9 @@ export default async function ImportPage() {
         </p>
       </div>
 
-      <ImportWizard accounts={accounts ?? []} spaces={spaces ?? []} settings={settings} />
+      <ImportWizard accounts={accounts} books={books ?? []} settings={settings} />
 
-      <ImportHistory imports={importHistory} />
+      <ImportHistory imports={importHistory} showBookFeature={showBookFeature} />
     </div>
   );
 }

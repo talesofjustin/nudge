@@ -8,8 +8,8 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { CategoryBadge, type CategoryInfo } from "@/components/transactions/category-badge";
 import { CheckIcon } from "@/components/icons/dashboard-icons";
 import { getPresetRange, type DatePreset } from "@/lib/date-presets";
-import type { FiltersState } from "@/lib/transaction-filters";
 import { sanitizeAmountInput } from "@/lib/sanitize-amount";
+import type { FiltersState } from "@/lib/transaction-filters";
 
 const ALL = "__all__";
 
@@ -22,12 +22,13 @@ const PERIOD_PRESETS: { key: DatePreset; label: string }[] = [
 // The period selector's own pill styling (active = solid ink, inactive =
 // plain text) — the single heaviest control in the toolbar.
 const periodButtonClass = (active: boolean) =>
-  `inline-flex h-8 items-center rounded-full px-3 text-[13px] font-medium transition-colors ${
+  `inline-flex h-7 items-center rounded-full px-2.5 text-[12.5px] font-medium transition-colors ${
     active ? "bg-ink-solid text-white" : "text-muted hover:text-foreground"
   }`;
 
 // Deliberately lighter weight than the period pills: a quiet outline at
-// rest, a soft violet tint (never a solid fill) once activated.
+// rest, a soft violet tint (never a solid fill) once activated. Kept
+// small/content-width — a single-select filter is not a large panel.
 function SecondaryFilterChip({
   label,
   active,
@@ -42,7 +43,7 @@ function SecondaryFilterChip({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-medium transition-colors ${
+          className={`inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition-colors ${
             active
               ? "border-violet-400 bg-violet-50 text-violet-600"
               : "border-border text-muted hover:border-muted-2 hover:text-foreground"
@@ -51,7 +52,7 @@ function SecondaryFilterChip({
           {label}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-64" align="start">
+      <PopoverContent className="w-52" align="start">
         {children}
       </PopoverContent>
     </Popover>
@@ -60,20 +61,20 @@ function SecondaryFilterChip({
 
 export function TransactionsToolbar({
   accounts,
-  spaces,
+  books,
   categories,
   filters,
   paydayAnchorDay,
   onChange,
 }: {
   accounts: { id: string; name: string }[];
-  spaces: { id: string; name: string }[];
+  books: { id: string; name: string }[];
   categories: CategoryInfo[];
   filters: FiltersState;
   paydayAnchorDay: number | null;
   onChange: (patch: Partial<FiltersState>) => void;
 }) {
-  const spaceName = filters.spaceId ? spaces.find((s) => s.id === filters.spaceId)?.name : null;
+  const bookName = filters.bookId ? books.find((b) => b.id === filters.bookId)?.name : null;
   const accountName = filters.accountId
     ? accounts.find((a) => a.id === filters.accountId)?.name
     : null;
@@ -89,7 +90,7 @@ export function TransactionsToolbar({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-4 py-3">
+    <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
       {PERIOD_PRESETS.map((p) => (
         <button
           key={p.key}
@@ -112,18 +113,20 @@ export function TransactionsToolbar({
         onChange={(from, to) => onChange({ period: "custom", dateFrom: from, dateTo: to })}
       />
 
-      <span className="mx-1.5 h-5 w-px bg-border" />
+      <span className="mx-1 h-4 w-px bg-border" />
 
-      {spaces.length > 0 && (
-        <SecondaryFilterChip label={spaceName ? `Space: ${spaceName}` : "Space"} active={!!filters.spaceId}>
+      {/* Progressive disclosure: the word "book" appears nowhere until a
+          second book exists — filtering by book is meaningless otherwise. */}
+      {books.length > 1 && (
+        <SecondaryFilterChip label={bookName ? `Book: ${bookName}` : "Book"} active={!!filters.bookId}>
           <Select
-            value={filters.spaceId ?? ALL}
-            onValueChange={(v) => onChange({ spaceId: v === ALL ? null : v })}
+            value={filters.bookId ?? ALL}
+            onValueChange={(v) => onChange({ bookId: v === ALL ? null : v })}
           >
-            <SelectItem value={ALL}>All spaces</SelectItem>
-            {spaces.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
+            <SelectItem value={ALL}>All books</SelectItem>
+            {books.map((b) => (
+              <SelectItem key={b.id} value={b.id}>
+                {b.name}
               </SelectItem>
             ))}
           </Select>
@@ -149,7 +152,7 @@ export function TransactionsToolbar({
 
       {categories.length > 0 && (
         <SecondaryFilterChip label={categoryLabel} active={filters.categoryIds.length > 0}>
-          <div className="themed-scrollbar flex max-h-72 flex-col gap-1 overflow-y-auto">
+          <div className="themed-scrollbar flex max-h-64 flex-col gap-0.5 overflow-y-auto">
             {categories.map((c) => {
               const checked = filters.categoryIds.includes(c.id);
               return (
@@ -157,14 +160,14 @@ export function TransactionsToolbar({
                   key={c.id}
                   type="button"
                   onClick={() => toggleCategory(c.id)}
-                  className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-left hover:bg-canvas"
+                  className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-canvas"
                 >
                   <span
-                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                    className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
                       checked ? "border-violet-600 bg-violet-600 text-white" : "border-border"
                     }`}
                   >
-                    {checked && <CheckIcon className="h-3 w-3" />}
+                    {checked && <CheckIcon className="h-2.5 w-2.5" />}
                   </span>
                   <CategoryBadge category={c} />
                 </button>
@@ -180,7 +183,7 @@ export function TransactionsToolbar({
         }
         active={hasAmount}
       >
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-1.5">
           <Input
             label="Min"
             type="text"
@@ -206,13 +209,13 @@ export function TransactionsToolbar({
 
       {filters.recipient && (
         <>
-          <span className="mx-1.5 h-5 w-px bg-border" />
+          <span className="mx-1 h-4 w-px bg-border" />
           <SecondaryFilterChip label={`Recipient: ${filters.recipient}`} active>
-            <p className="mb-2 text-[13px] text-muted">Filtering by recipient.</p>
+            <p className="mb-2 text-[12.5px] text-muted">Filtering by recipient.</p>
             <button
               type="button"
               onClick={() => onChange({ recipient: null })}
-              className="text-[13px] font-medium text-violet-600 hover:underline"
+              className="text-[12.5px] font-medium text-violet-600 hover:underline"
             >
               Clear recipient filter
             </button>

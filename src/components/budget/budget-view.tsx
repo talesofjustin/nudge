@@ -9,8 +9,9 @@ import { NotBudgetedSection } from "@/components/budget/not-budgeted-section";
 import { BudgetEditSection } from "@/components/budget/budget-edit-section";
 import { EnvelopeTip } from "@/components/budget/envelope-tip";
 import type { CategoryInfo } from "@/components/transactions/category-badge";
+import type { BookInfo } from "@/components/transactions/book-picker";
 import { getFinancialMonthRange, shiftFinancialMonth, financialMonthBudgetKey } from "@/lib/financial-month";
-import { budgetMonthToSearchParams, type BudgetMonth } from "@/lib/budget-filters";
+import { budgetSearchParams, type BudgetMonth } from "@/lib/budget-filters";
 import { getBudgetProgress, upsertBudget, type BudgetProgressResult } from "@/app/(app)/budget/actions";
 
 function daysBetweenInclusive(fromISO: string, toISO: string): number {
@@ -21,13 +22,17 @@ function daysBetweenInclusive(fromISO: string, toISO: string): number {
 
 export function BudgetView({
   categories,
+  books,
   initialMonth,
+  initialBookId,
   initialProgress,
   paydayAnchorDay,
   budgetTipDismissed,
 }: {
   categories: CategoryInfo[];
+  books: BookInfo[];
   initialMonth: BudgetMonth;
+  initialBookId: string | null;
   initialProgress: BudgetProgressResult;
   paydayAnchorDay: number | null;
   budgetTipDismissed: boolean;
@@ -35,7 +40,13 @@ export function BudgetView({
   const router = useRouter();
   const pathname = usePathname();
 
+  // Book selector only exists once a second book does — for 0-1 books,
+  // bookId always stays null (the "global" budget) and the word "book"
+  // never appears anywhere on this page.
+  const showBookFeature = books.length > 1;
+
   const [month, setMonth] = useState<BudgetMonth>(initialMonth);
+  const [bookId, setBookId] = useState<string | null>(showBookFeature ? initialBookId : null);
   const [progress, setProgress] = useState<BudgetProgressResult>(initialProgress);
   const [loading, setLoading] = useState(false);
   const isFirstRender = useRef(true);
@@ -55,28 +66,28 @@ export function BudgetView({
       return;
     }
 
-    router.replace(`${pathname}?${budgetMonthToSearchParams(month).toString()}`, { scroll: false });
+    router.replace(`${pathname}?${budgetSearchParams(month, bookId).toString()}`, { scroll: false });
 
     (async () => {
       setLoading(true);
-      const res = await getBudgetProgress(month.from, month.to);
+      const res = await getBudgetProgress(month.from, month.to, bookId);
       setLoading(false);
       setProgress(res);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month]);
+  }, [month, bookId]);
 
   function navigate(direction: "prev" | "next") {
     setMonth((prev) => shiftFinancialMonth(prev, paydayAnchorDay, direction));
   }
 
   async function refreshProgress() {
-    const res = await getBudgetProgress(month.from, month.to);
+    const res = await getBudgetProgress(month.from, month.to, bookId);
     setProgress(res);
   }
 
   async function handleSetBudget(categoryId: string, amount: number) {
-    await upsertBudget(monthKey, categoryId, amount);
+    await upsertBudget(monthKey, categoryId, amount, bookId);
     await refreshProgress();
   }
 
@@ -108,6 +119,23 @@ export function BudgetView({
       <EnvelopeTip initiallyDismissed={budgetTipDismissed} />
 
       <div className="shadow-soft overflow-hidden rounded-xl border border-border bg-surface">
+        {showBookFeature && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2.5">
+            {books.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => setBookId(b.id)}
+                className={`inline-flex h-7 items-center rounded-full px-2.5 text-[12.5px] font-medium transition-colors ${
+                  bookId === b.id ? "bg-ink-solid text-white" : "text-muted hover:text-foreground"
+                }`}
+              >
+                {b.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="border-b border-border">
           <MonthNav
             from={month.from}
@@ -125,6 +153,7 @@ export function BudgetView({
           dayOfMonth={dayOfMonth}
           totalDays={totalDays}
           isCurrentMonth={isCurrentMonth}
+          unassignedCount={showBookFeature ? progress.unassignedCount : 0}
         />
 
         {loading && <p className="px-4 py-3 text-[13px] text-muted">Updating…</p>}
@@ -157,6 +186,7 @@ export function BudgetView({
         monthKey={monthKey}
         monthFrom={month.from}
         monthTo={month.to}
+        bookId={bookId}
         onSaved={refreshProgress}
       />
     </div>

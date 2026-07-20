@@ -5,24 +5,22 @@ import { useRouter } from "next/navigation";
 import Papa from "papaparse";
 import { Card } from "@/components/ui/card";
 import { StepIndicator, type Step } from "@/components/import/step-indicator";
+import { AccountStep } from "@/components/import/account-step";
 import { UploadStep } from "@/components/import/upload-step";
-import { AccountSpaceStep } from "@/components/import/account-space-step";
 import { MappingStep } from "@/components/import/mapping-step";
 import { ReviewStep } from "@/components/import/review-step";
 import { DoneStep } from "@/components/import/done-step";
 import { ProcessingIndicator } from "@/components/import/processing-indicator";
-import { guessColumnMapping, type ColumnMapping, type ParsedRow } from "@/lib/csv";
+import type { BookInfo } from "@/components/transactions/book-picker";
+import { guessColumnMapping, mapRows, type ColumnMapping, type ParsedRow } from "@/lib/csv";
 import {
   importTransactions,
-  type AccountChoice,
+  saveColumnMapping,
+  type ImportAccountOption,
   type ImportRow,
-  type SpaceChoice,
 } from "@/app/(app)/import/actions";
 import { upsertUserSettings, type UserSettings } from "@/lib/user-settings";
-import type { AccountType } from "@/lib/supabase/database.types";
-
-type AccountOption = { id: string; name: string; type: AccountType };
-type SpaceOption = { id: string; name: string };
+import type { DecimalSeparator } from "@/lib/supabase/database.types";
 
 const EMPTY_MAPPING: ColumnMapping = {
   date: null,
@@ -34,30 +32,27 @@ const EMPTY_MAPPING: ColumnMapping = {
 
 export function ImportWizard({
   accounts,
-  spaces,
+  books,
   settings,
 }: {
-  accounts: AccountOption[];
-  spaces: SpaceOption[];
+  accounts: ImportAccountOption[];
+  books: BookInfo[];
   settings: UserSettings;
 }) {
   const router = useRouter();
 
-  const [step, setStep] = useState<Step>("upload");
+  const [step, setStep] = useState<Step>("account");
+  const [accountId, setAccountId] = useState<string | null>(accounts[0]?.id ?? null);
+  const selectedAccount = accounts.find((a) => a.id === accountId) ?? null;
+
   const [reading, setReading] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
-
-  const [rows, setRows] = useState<ParsedRow[]>([]);
+  const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_MAPPING);
   const [fileName, setFileName] = useState<string | null>(null);
-
-  const [accountChoice, setAccountChoice] = useState<AccountChoice>(
-    accounts.length > 0
-      ? { kind: "existing", id: accounts[0].id }
-      : { kind: "new", name: "", type: "bank" },
-  );
-  const [spaceChoice, setSpaceChoice] = useState<SpaceChoice>({ kind: "none" });
+  const [showMappingUi, setShowMappingUi] = useState(false);
+  const [usedSavedMapping, setUsedSavedMapping] = useState(false);
 
   const [pendingRows, setPendingRows] = useState<ImportRow[]>([]);
   const [pendingSkippedCount, setPendingSkippedCount] = useState(0);
@@ -72,10 +67,6 @@ export function ImportWizard({
     statementEndDate: string | null;
   } | null>(null);
 
-  // Formalises the timezone the date parser's free-text fallback uses: the
-  // user's stored preference if they have one, otherwise the browser's own
-  // timezone, persisted silently below so it becomes an explicit, stable
-  // setting rather than an implicit one re-detected every time.
   const [timezone] = useState(
     () => settings.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
   );
@@ -83,8 +74,6 @@ export function ImportWizard({
   useEffect(() => {
     if (settings.timezone) return;
     void upsertUserSettings({ timezone });
-    // Only ever runs once per mount — settings.timezone is a server-fetched
-    // initial value, not expected to change during this session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -103,10 +92,39 @@ export function ImportWizard({
           return;
         }
         const fields = results.meta.fields ?? [];
-        setRows(results.data);
+        setParsedRows(results.data);
         setHeaders(fields);
-        setMapping(guessColumnMapping(fields));
-        setStep("account");
+
+        const saved = selectedAccount?.columnMapping;
+        if (saved) {
+          const savedMapping: ColumnMapping = {
+            date: saved.date,
+            amount: saved.amount,
+            recipient: saved.recipient,
+            description: saved.description,
+            sign: saved.sign,
+          };
+          const mapped = mapRows(results.data, savedMapping, {
+            decimalSeparator: saved.decimalSeparator,
+            timezone,
+            expenseValue: saved.expenseValue,
+          });
+          const validRows = mapped.filter((r) => r.valid);
+          setPendingRows(
+            validRows.map((r) => ({
+              date: r.date!,
+              amount: r.amount!,
+              recipient: r.recipient,
+              description: r.description,
+            })),
+          );
+          setPendingSkippedCount(mapped.length - validRows.length);
+          setUsedSavedMapping(true);
+          setStep("review");
+        } else {
+          setMapping(guessColumnMapping(fields));
+          setShowMappingUi(true);
+        }
       },
       error: (err) => {
         setReading(false);
@@ -115,27 +133,31 @@ export function ImportWizard({
     });
   }
 
-  function handleMappingConfirm(validRows: ImportRow[], skippedCount: number) {
+  async function handleMappingConfirm(
+    validRows: ImportRow[],
+    skippedCount: number,
+    decimalSeparator: DecimalSeparator,
+    expenseValue: string | null,
+  ) {
+    if (accountId) {
+      void saveColumnMapping(accountId, { ...mapping, decimalSeparator, expenseValue });
+    }
     setPendingRows(validRows);
     setPendingSkippedCount(skippedCount);
+    setUsedSavedMapping(false);
+    setShowMappingUi(false);
     setStep("review");
   }
 
-  async function handleFinalConfirm() {
+  async function handleFinalConfirm(selectedRows: ImportRow[], bookOverrides: Record<string, string>) {
+    if (!accountId) return;
     setSubmitting(true);
     setSubmitError(null);
-    const res = await importTransactions(
-      accountChoice,
-      spaceChoice,
-      pendingRows,
-      fileName,
-      pendingSkippedCount,
-    );
+    const res = await importTransactions(accountId, selectedRows, fileName, pendingSkippedCount, bookOverrides);
     setSubmitting(false);
 
     if (!res.success) {
       setSubmitError(res.error);
-      setStep("mapping");
       return;
     }
 
@@ -147,28 +169,25 @@ export function ImportWizard({
       statementEndDate: res.statementEndDate,
     });
     setStep("done");
-    // Re-fetch server data (accounts/spaces/settings + import history) in the
-    // background so the history list below reflects this import.
     router.refresh();
   }
 
   function handleImportAnother() {
-    setRows([]);
+    setParsedRows([]);
     setHeaders([]);
     setMapping(EMPTY_MAPPING);
     setFileName(null);
+    setShowMappingUi(false);
+    setUsedSavedMapping(false);
     setPendingRows([]);
     setPendingSkippedCount(0);
     setSubmitError(null);
     setResult(null);
-    setStep("upload");
+    setStep("account");
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* px-6 matches Card's own p-6 (used below and by ImportHistory) so the
-          indicator's left/right edges line up with the card content's edges
-          rather than spanning the full, wider container. */}
       <div className="px-6">
         <StepIndicator step={step} />
       </div>
@@ -179,32 +198,32 @@ export function ImportWizard({
         </Card>
       ) : (
         <>
-          {step === "upload" && (
-            <UploadStep onFile={handleFile} reading={reading} error={parseError} />
-          )}
-
           {step === "account" && (
-            <AccountSpaceStep
+            <AccountStep
               accounts={accounts}
-              spaces={spaces}
-              accountChoice={accountChoice}
-              spaceChoice={spaceChoice}
-              onChangeAccount={setAccountChoice}
-              onChangeSpace={setSpaceChoice}
-              onBack={() => setStep("upload")}
-              onNext={() => setStep("mapping")}
+              selectedId={accountId}
+              onSelect={setAccountId}
+              onAccountAdded={setAccountId}
+              onNext={() => setStep("upload")}
             />
           )}
 
-          {step === "mapping" && (
+          {step === "upload" && !showMappingUi && (
+            <UploadStep onFile={handleFile} reading={reading} error={parseError} />
+          )}
+
+          {step === "upload" && showMappingUi && (
             <MappingStep
               headers={headers}
-              rows={rows}
+              rows={parsedRows}
               mapping={mapping}
               onChangeMapping={setMapping}
               timezone={timezone}
               defaultDecimalSeparator={settings.decimalSeparator}
-              onBack={() => setStep("account")}
+              onBack={() => {
+                setShowMappingUi(false);
+                setStep("account");
+              }}
               onConfirm={handleMappingConfirm}
               submitError={submitError}
             />
@@ -213,8 +232,12 @@ export function ImportWizard({
           {step === "review" && (
             <ReviewStep
               rows={pendingRows}
-              accountChoice={accountChoice}
-              onBack={() => setStep("mapping")}
+              accountId={accountId!}
+              books={books}
+              onBack={() => {
+                setStep("upload");
+                if (!usedSavedMapping) setShowMappingUi(true);
+              }}
               onConfirm={handleFinalConfirm}
             />
           )}

@@ -14,7 +14,7 @@ export type ImportHistoryEntry = {
   skippedCount: number;
   createdAt: string;
   accountName: string;
-  spaceName: string | null;
+  bookName: string | null;
   statementStartDate: string | null;
   statementEndDate: string | null;
 };
@@ -27,7 +27,13 @@ function formatDate(iso: string): string {
   });
 }
 
-export function ImportHistory({ imports: initialImports }: { imports: ImportHistoryEntry[] }) {
+export function ImportHistory({
+  imports: initialImports,
+  showBookFeature,
+}: {
+  imports: ImportHistoryEntry[];
+  showBookFeature: boolean;
+}) {
   const [imports, setImports] = useState(initialImports);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -62,7 +68,7 @@ export function ImportHistory({ imports: initialImports }: { imports: ImportHist
                 </p>
                 <p className="mt-0.5 text-[13px] text-muted">
                   {imp.accountName}
-                  {imp.spaceName && ` · ${imp.spaceName}`}
+                  {showBookFeature && imp.bookName && ` · ${imp.bookName}`}
                 </p>
                 <p className="mt-1 text-[11.5px] text-muted-2">
                   {imp.rowCount} row{imp.rowCount === 1 ? "" : "s"}

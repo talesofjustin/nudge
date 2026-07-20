@@ -20,6 +20,7 @@ export function BudgetEditSection({
   monthKey,
   monthFrom,
   monthTo,
+  bookId,
   onSaved,
 }: {
   categories: CategoryInfo[];
@@ -27,6 +28,7 @@ export function BudgetEditSection({
   monthKey: string;
   monthFrom: string;
   monthTo: string;
+  bookId: string | null;
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -41,7 +43,7 @@ export function BudgetEditSection({
     setOpen(next);
     if (next && suggestions === null) {
       setLoadingSuggestions(true);
-      const result = await getBudgetSuggestions(monthFrom, monthTo);
+      const result = await getBudgetSuggestions(monthFrom, monthTo, bookId);
       setSuggestions(new Map(result.map((s) => [s.categoryId, s])));
       setLoadingSuggestions(false);
     }
@@ -67,7 +69,7 @@ export function BudgetEditSection({
 
     if (raw === "") {
       if (budgetsByCategory.has(categoryId)) {
-        await deleteBudget(monthKey, categoryId);
+        await deleteBudget(monthKey, categoryId, bookId);
         clearDraft(categoryId);
         onSaved();
       } else {
@@ -78,14 +80,14 @@ export function BudgetEditSection({
 
     const amount = Number(raw);
     if (Number.isNaN(amount) || amount < 0) return;
-    await upsertBudget(monthKey, categoryId, amount);
+    await upsertBudget(monthKey, categoryId, amount, bookId);
     clearDraft(categoryId);
     onSaved();
   }
 
   async function handleUseSuggestion(categoryId: string, amount: number) {
     setDrafts((prev) => new Map(prev).set(categoryId, amount.toFixed(2)));
-    await upsertBudget(monthKey, categoryId, amount);
+    await upsertBudget(monthKey, categoryId, amount, bookId);
     clearDraft(categoryId);
     onSaved();
   }
@@ -93,7 +95,7 @@ export function BudgetEditSection({
   async function handleCopyLastMonth() {
     setCopying(true);
     setCopyMessage(null);
-    const res = await copyLastMonthBudgets(monthFrom, monthTo);
+    const res = await copyLastMonthBudgets(monthFrom, monthTo, bookId);
     setCopying(false);
     setDrafts(new Map());
     setCopyMessage(

@@ -3,8 +3,16 @@
 // 20260714215055_user_settings.sql, 20260715110614_imports.sql,
 // 20260718161433_known_recipients.sql, 20260718161434_extend_imports.sql,
 // 20260718161435_transactions_raw_description.sql,
-// 20260718224029_payday_anchor_day.sql, and
-// 20260719211329_budget_tip_dismissed.sql. Shaped the way
+// 20260718224029_payday_anchor_day.sql,
+// 20260719065257_add_salary_category.sql,
+// 20260719211329_budget_tip_dismissed.sql,
+// 20260719215053_rename_spaces_to_books.sql,
+// 20260719215054_book_resolution.sql,
+// 20260719215055_recipient_category_rules.sql,
+// 20260719215056_budgets_book_scoping.sql,
+// 20260719215058_accounts_column_mapping.sql,
+// 20260719215235_user_theme_preference.sql, and
+// 20260720091557_book_suggestion_dismissed.sql. Shaped the way
 // `supabase gen types typescript` would produce it, so running that command
 // later (once the migrations have been applied) is a drop-in replacement for
 // this file. `Relationships` is left empty here (no typed nested-select
@@ -12,11 +20,24 @@
 
 export type AccountType = "bank" | "paypal" | "credit_card" | "cash" | "other";
 export type DecimalSeparator = "period" | "comma";
+export type ThemePreference = "light" | "dark" | "system";
+
+// Saved on accounts.column_mapping — mirrors ColumnMapping in lib/csv.ts
+// plus the locale/expense-value choices made alongside it on first import.
+export type SavedColumnMapping = {
+  date: string | null;
+  amount: string | null;
+  recipient: string | null;
+  description: string | null;
+  sign: string | null;
+  decimalSeparator: DecimalSeparator;
+  expenseValue: string | null;
+};
 
 export type Database = {
   public: {
     Tables: {
-      spaces: {
+      books: {
         Row: {
           id: string;
           user_id: string;
@@ -70,6 +91,8 @@ export type Database = {
           user_id: string;
           name: string;
           type: AccountType;
+          default_book_id: string | null;
+          column_mapping: SavedColumnMapping | null;
           created_at: string;
         };
         Insert: {
@@ -77,6 +100,8 @@ export type Database = {
           user_id: string;
           name: string;
           type?: AccountType;
+          default_book_id?: string | null;
+          column_mapping?: SavedColumnMapping | null;
           created_at?: string;
         };
         Update: {
@@ -84,6 +109,8 @@ export type Database = {
           user_id?: string;
           name?: string;
           type?: AccountType;
+          default_book_id?: string | null;
+          column_mapping?: SavedColumnMapping | null;
           created_at?: string;
         };
         Relationships: [];
@@ -94,7 +121,7 @@ export type Database = {
           user_id: string;
           account_id: string;
           category_id: string | null;
-          space_id: string | null;
+          book_id: string | null;
           amount: number;
           recipient: string | null;
           description: string | null;
@@ -109,7 +136,7 @@ export type Database = {
           user_id: string;
           account_id: string;
           category_id?: string | null;
-          space_id?: string | null;
+          book_id?: string | null;
           amount: number;
           recipient?: string | null;
           description?: string | null;
@@ -124,7 +151,7 @@ export type Database = {
           user_id?: string;
           account_id?: string;
           category_id?: string | null;
-          space_id?: string | null;
+          book_id?: string | null;
           amount?: number;
           recipient?: string | null;
           description?: string | null;
@@ -140,6 +167,7 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
+          book_id: string | null;
           category_id: string;
           month: string;
           amount: number;
@@ -148,6 +176,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
+          book_id?: string | null;
           category_id: string;
           month: string;
           amount: number;
@@ -156,6 +185,7 @@ export type Database = {
         Update: {
           id?: string;
           user_id?: string;
+          book_id?: string | null;
           category_id?: string;
           month?: string;
           amount?: number;
@@ -170,6 +200,8 @@ export type Database = {
           timezone: string | null;
           payday_anchor_day: number | null;
           budget_tip_dismissed: boolean;
+          theme: ThemePreference | null;
+          book_suggestion_dismissed: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -179,6 +211,8 @@ export type Database = {
           timezone?: string | null;
           payday_anchor_day?: number | null;
           budget_tip_dismissed?: boolean;
+          theme?: ThemePreference | null;
+          book_suggestion_dismissed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -188,6 +222,8 @@ export type Database = {
           timezone?: string | null;
           payday_anchor_day?: number | null;
           budget_tip_dismissed?: boolean;
+          theme?: ThemePreference | null;
+          book_suggestion_dismissed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -198,7 +234,7 @@ export type Database = {
           id: string;
           user_id: string;
           account_id: string;
-          space_id: string | null;
+          book_id: string | null;
           filename: string | null;
           row_count: number;
           skipped_count: number;
@@ -210,7 +246,7 @@ export type Database = {
           id?: string;
           user_id: string;
           account_id: string;
-          space_id?: string | null;
+          book_id?: string | null;
           filename?: string | null;
           row_count: number;
           skipped_count?: number;
@@ -222,7 +258,7 @@ export type Database = {
           id?: string;
           user_id?: string;
           account_id?: string;
-          space_id?: string | null;
+          book_id?: string | null;
           filename?: string | null;
           row_count?: number;
           skipped_count?: number;
@@ -252,6 +288,54 @@ export type Database = {
           user_id?: string;
           recipient?: string;
           is_own_account?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      recipient_book_rules: {
+        Row: {
+          id: string;
+          user_id: string;
+          recipient: string;
+          book_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          recipient: string;
+          book_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          recipient?: string;
+          book_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      recipient_category_rules: {
+        Row: {
+          id: string;
+          user_id: string;
+          recipient: string;
+          category_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          recipient: string;
+          category_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          recipient?: string;
+          category_id?: string;
           created_at?: string;
         };
         Relationships: [];

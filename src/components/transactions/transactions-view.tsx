@@ -5,40 +5,51 @@ import { useRouter, usePathname } from "next/navigation";
 import { TransactionsToolbar } from "@/components/transactions/transactions-toolbar";
 import { ContextStrip } from "@/components/transactions/context-strip";
 import { TransactionRow } from "@/components/transactions/transaction-row";
+import { DuplicateReview } from "@/components/transactions/duplicate-review";
 import type { CategoryInfo } from "@/components/transactions/category-badge";
+import type { BookInfo } from "@/components/transactions/book-picker";
+import { normalizeRecipient } from "@/lib/known-recipients";
 import {
   getFilteredTransactions,
   updateTransaction,
   createCategory,
   deleteTransactions,
+  getRecipientBookRules,
+  setRecipientBookRule,
+  getRecipientCategoryRules,
+  setRecipientCategoryRule,
+  getDuplicateGroups,
   type TransactionRowData,
+  type DuplicateGroup,
 } from "@/app/(app)/transactions/actions";
 import { filtersToSearchParams, type FiltersState } from "@/lib/transaction-filters";
 
 type ColumnAlign = "left" | "right" | "center";
 
-const COLUMNS: { label: string; width: string; align?: ColumnAlign }[] = [
-  { label: "", width: "3.2%", align: "center" },
-  { label: "Date", width: "7.7%" },
-  { label: "Recipient", width: "25%" },
-  { label: "Note", width: "17.6%" },
-  { label: "Amount", width: "9.7%", align: "right" },
-  { label: "Category", width: "12%" },
-  { label: "Account", width: "10%" },
-  { label: "Space", width: "7%" },
-  { label: "Recurring", width: "7.8%", align: "center" },
-];
+function getColumns(showBookColumn: boolean): { label: string; width: string; align?: ColumnAlign }[] {
+  const base: { label: string; width: string; align?: ColumnAlign }[] = [
+    { label: "", width: "3%", align: "center" },
+    { label: "Date", width: "7%" },
+    { label: "Recipient", width: showBookColumn ? "20%" : "24%" },
+    { label: "Note", width: showBookColumn ? "15%" : "17%" },
+    { label: "Amount", width: "10%", align: "right" },
+    { label: "Category", width: "12%" },
+  ];
+  if (showBookColumn) base.push({ label: "Book", width: "11%" });
+  base.push({ label: "Account", width: "10%" }, { label: "Recurring", width: "7%", align: "center" });
+  return base;
+}
 
 export function TransactionsView({
   accounts,
-  spaces,
+  books,
   categories: initialCategories,
   initialRows,
   initialFilters,
   paydayAnchorDay,
 }: {
   accounts: { id: string; name: string }[];
-  spaces: { id: string; name: string }[];
+  books: BookInfo[];
   categories: CategoryInfo[];
   initialRows: TransactionRowData[];
   initialFilters: FiltersState;
@@ -56,15 +67,40 @@ export function TransactionsView({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showOnlyUncategorized, setShowOnlyUncategorized] = useState(false);
+  const [showOnlyUnassignedBook, setShowOnlyUnassignedBook] = useState(false);
+  const [bookRules, setBookRules] = useState<Map<string, string>>(new Map());
+  const [categoryRules, setCategoryRules] = useState<Map<string, string>>(new Map());
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
+  const [duplicateBannerDismissed, setDuplicateBannerDismissed] = useState(false);
+  const [reviewingDuplicates, setReviewingDuplicates] = useState(false);
+  const [deletingDuplicates, setDeletingDuplicates] = useState(false);
   const isFirstRender = useRef(true);
 
+  const showBookFeature = books.length > 1;
+
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
-  const spacesById = useMemo(() => new Map(spaces.map((s) => [s.id, s.name])), [spaces]);
+
+  useEffect(() => {
+    (async () => {
+      const [bookRuleList, categoryRuleList, duplicates] = await Promise.all([
+        getRecipientBookRules(),
+        getRecipientCategoryRules(),
+        getDuplicateGroups(),
+      ]);
+      setBookRules(new Map(bookRuleList.map((r) => [normalizeRecipient(r.recipient), r.bookId])));
+      setCategoryRules(new Map(categoryRuleList.map((r) => [normalizeRecipient(r.recipient), r.categoryId])));
+      setDuplicateGroups(duplicates);
+    })();
+  }, []);
 
   const uncategorizedCount = rows.filter((r) => !r.categoryId && !r.isTransfer).length;
-  const visibleRows = showOnlyUncategorized
-    ? rows.filter((r) => !r.categoryId && !r.isTransfer)
-    : rows;
+  const unassignedBookCount = showBookFeature ? rows.filter((r) => !r.bookId).length : 0;
+
+  const visibleRows = rows.filter((r) => {
+    if (showOnlyUncategorized && (r.categoryId || r.isTransfer)) return false;
+    if (showOnlyUnassignedBook && r.bookId) return false;
+    return true;
+  });
 
   // Debounced refetch + URL sync whenever any filter changes (skips the
   // first render — the server already fetched matching the initial URL).
@@ -85,7 +121,7 @@ export function TransactionsView({
       const max = filters.amountMax.trim() ? Number(filters.amountMax) : null;
 
       const res = await getFilteredTransactions({
-        spaceId: filters.spaceId,
+        bookId: filters.bookId,
         accountId: filters.accountId,
         categoryIds: filters.categoryIds,
         amountMin: min !== null && !Number.isNaN(min) ? min : null,
@@ -117,7 +153,7 @@ export function TransactionsView({
 
   function handleUpdate(
     id: string,
-    updates: { description?: string; categoryId?: string | null; isRecurring?: boolean },
+    updates: { description?: string; categoryId?: string | null; isRecurring?: boolean; bookId?: string | null },
   ) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...toRowPatch(updates) } : r)));
     void updateTransaction(id, updates);
@@ -133,6 +169,16 @@ export function TransactionsView({
       setCategories((prev) => [...prev, created]);
     }
     return created;
+  }
+
+  async function handleOfferBookRule(recipient: string, bookId: string) {
+    setBookRules((prev) => new Map(prev).set(normalizeRecipient(recipient), bookId));
+    await setRecipientBookRule(recipient, bookId);
+  }
+
+  async function handleOfferCategoryRule(recipient: string, categoryId: string) {
+    setCategoryRules((prev) => new Map(prev).set(normalizeRecipient(recipient), categoryId));
+    await setRecipientCategoryRule(recipient, categoryId);
   }
 
   function toggleSelect(id: string) {
@@ -164,12 +210,29 @@ export function TransactionsView({
     }
   }
 
+  async function handleConfirmDeleteDuplicates(ids: string[]) {
+    setDeletingDuplicates(true);
+    const res = await deleteTransactions(ids);
+    setDeletingDuplicates(false);
+    if (res.success) {
+      setRows((prev) => prev.filter((r) => !ids.includes(r.id)));
+      setDuplicateGroups((prev) =>
+        (prev ?? [])
+          .map((g) => ({ ...g, transactions: g.transactions.filter((t) => !ids.includes(t.id)) }))
+          .filter((g) => g.transactions.length > 1),
+      );
+      setReviewingDuplicates(false);
+    }
+  }
+
+  const columns = getColumns(showBookFeature);
+
   return (
     <div className="shadow-soft overflow-hidden rounded-xl border border-border bg-surface">
       <div className="border-b border-border">
         <TransactionsToolbar
           accounts={accounts}
-          spaces={spaces}
+          books={books}
           categories={categories}
           filters={filters}
           paydayAnchorDay={paydayAnchorDay}
@@ -184,6 +247,14 @@ export function TransactionsView({
         uncategorizedCount={uncategorizedCount}
         showOnlyUncategorized={showOnlyUncategorized}
         onToggleUncategorized={() => setShowOnlyUncategorized((v) => !v)}
+        unassignedBookCount={unassignedBookCount}
+        showOnlyUnassignedBook={showOnlyUnassignedBook}
+        onToggleUnassignedBook={() => setShowOnlyUnassignedBook((v) => !v)}
+        showBookFeature={showBookFeature}
+        duplicateCount={duplicateGroups?.reduce((sum, g) => sum + g.transactions.length, 0) ?? 0}
+        duplicateBannerDismissed={duplicateBannerDismissed}
+        onReviewDuplicates={() => setReviewingDuplicates(true)}
+        onDismissDuplicateBanner={() => setDuplicateBannerDismissed(true)}
         selectedCount={selectedIds.size}
         confirmingDelete={confirmingDelete}
         deleting={deleting}
@@ -192,69 +263,87 @@ export function TransactionsView({
         onConfirmDelete={handleBulkDelete}
       />
 
-      {error && (
-        <p className="px-4 py-4 text-sm text-danger" role="alert">
-          {error}
-        </p>
-      )}
-
-      {loading && <p className="px-4 py-3 text-[13px] text-muted">Updating…</p>}
-
-      {visibleRows.length === 0 && !loading ? (
-        <p className="px-4 py-12 text-center text-[13px] text-muted">
-          {showOnlyUncategorized
-            ? "No uncategorized transactions in this period."
-            : "No transactions match these filters."}
-        </p>
+      {reviewingDuplicates && duplicateGroups ? (
+        <DuplicateReview
+          groups={duplicateGroups}
+          deleting={deletingDuplicates}
+          onClose={() => setReviewingDuplicates(false)}
+          onConfirmDelete={handleConfirmDeleteDuplicates}
+        />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full table-fixed border-collapse text-left">
-            <colgroup>
-              {COLUMNS.map((col, i) => (
-                <col key={i} style={{ width: col.width }} />
-              ))}
-            </colgroup>
-            <thead>
-              <tr className="bg-canvas">
-                <th className="sticky top-0 z-10 border-b border-border bg-canvas px-3 py-2.5 text-center align-middle">
-                  <input
-                    type="checkbox"
-                    checked={visibleRows.length > 0 && selectedIds.size === visibleRows.length}
-                    onChange={toggleSelectAll}
-                    className="h-4 w-4 rounded border-border accent-[var(--violet-600)]"
-                    aria-label="Select all transactions"
-                  />
-                </th>
-                {COLUMNS.slice(1).map((col) => (
-                  <th
-                    key={col.label}
-                    className={`sticky top-0 z-10 truncate border-b border-border bg-canvas px-3 py-2.5 text-[11px] font-medium tracking-wide text-muted uppercase ${
-                      col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"
-                    }`}
-                  >
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((row) => (
-                <TransactionRow
-                  key={row.id}
-                  row={row}
-                  accountName={accountsById.get(row.accountId) ?? "Unknown account"}
-                  spaceName={row.spaceId ? (spacesById.get(row.spaceId) ?? null) : null}
-                  categories={categories}
-                  selected={selectedIds.has(row.id)}
-                  onToggleSelect={toggleSelect}
-                  onUpdate={handleUpdate}
-                  onFilterByRecipient={handleFilterByRecipient}
-                  onCreateCategory={handleCreateCategory}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {error && (
+            <p className="px-4 py-4 text-sm text-danger" role="alert">
+              {error}
+            </p>
+          )}
+
+          {loading && <p className="px-4 py-3 text-[13px] text-muted">Updating…</p>}
+
+          {visibleRows.length === 0 && !loading ? (
+            <p className="px-4 py-12 text-center text-[13px] text-muted">
+              {showOnlyUncategorized
+                ? "No uncategorized transactions in this period."
+                : showOnlyUnassignedBook
+                  ? "No transactions need a book in this period."
+                  : "No transactions match these filters."}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed border-collapse text-left">
+                <colgroup>
+                  {columns.map((col, i) => (
+                    <col key={i} style={{ width: col.width }} />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr className="bg-canvas">
+                    <th className="sticky top-0 z-10 border-b border-border bg-canvas px-3 py-2 text-center align-middle">
+                      <input
+                        type="checkbox"
+                        checked={visibleRows.length > 0 && selectedIds.size === visibleRows.length}
+                        onChange={toggleSelectAll}
+                        className="h-3.5 w-3.5 rounded border-border accent-[var(--violet-600)]"
+                        aria-label="Select all transactions"
+                      />
+                    </th>
+                    {columns.slice(1).map((col) => (
+                      <th
+                        key={col.label}
+                        className={`sticky top-0 z-10 truncate border-b border-border bg-canvas px-3 py-2 text-[11px] font-medium tracking-wide text-muted uppercase ${
+                          col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"
+                        }`}
+                      >
+                        {col.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => (
+                    <TransactionRow
+                      key={row.id}
+                      row={row}
+                      accountName={accountsById.get(row.accountId) ?? "Unknown account"}
+                      books={books}
+                      categories={categories}
+                      showBookColumn={showBookFeature}
+                      selected={selectedIds.has(row.id)}
+                      hasBookRule={!!row.recipient && bookRules.has(normalizeRecipient(row.recipient))}
+                      hasCategoryRule={!!row.recipient && categoryRules.has(normalizeRecipient(row.recipient))}
+                      onToggleSelect={toggleSelect}
+                      onUpdate={handleUpdate}
+                      onFilterByRecipient={handleFilterByRecipient}
+                      onCreateCategory={handleCreateCategory}
+                      onOfferBookRule={handleOfferBookRule}
+                      onOfferCategoryRule={handleOfferCategoryRule}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -264,10 +353,12 @@ function toRowPatch(updates: {
   description?: string;
   categoryId?: string | null;
   isRecurring?: boolean;
+  bookId?: string | null;
 }): Partial<TransactionRowData> {
   const patch: Partial<TransactionRowData> = {};
   if (updates.description !== undefined) patch.description = updates.description;
   if (updates.categoryId !== undefined) patch.categoryId = updates.categoryId;
   if (updates.isRecurring !== undefined) patch.isRecurring = updates.isRecurring;
+  if (updates.bookId !== undefined) patch.bookId = updates.bookId;
   return patch;
 }
