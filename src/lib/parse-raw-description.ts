@@ -53,3 +53,29 @@ export function parseRawDescription(raw: string): ParsedDescriptionField[] | nul
   }
   return fields.length > 0 ? fields : null;
 }
+
+// Both helpers below reuse the same field extraction as the display
+// parser — if we can't confidently parse the structure, we shouldn't
+// trust field extraction either, so they share its bail-out behavior.
+export function extractCounterpartyIban(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const fields = parseRawDescription(raw);
+  const match = fields?.find((f) => f.label.toLowerCase() === "iban");
+  return match ? match.value.trim() : null;
+}
+
+const DATUM_TIJD_PATTERN = /^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/;
+
+// Returns just the time-of-day ("HH:MM:SS") — the date portion of
+// "Datum/Tijd" is redundant with the mapped date column and only the time
+// is missing from occurred_at today.
+export function extractTransactionTime(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const fields = parseRawDescription(raw);
+  const match = fields?.find((f) => f.label.toLowerCase() === "datum/tijd");
+  if (!match) return null;
+  const m = match.value.match(DATUM_TIJD_PATTERN);
+  if (!m) return null;
+  const [, , , , hh, mm, ss] = m;
+  return `${hh}:${mm}:${ss}`;
+}

@@ -3,13 +3,17 @@
 import { createClient } from "@/lib/supabase/server";
 import type { AccountType, SavedColumnMapping } from "@/lib/supabase/database.types";
 import { IMPORT_CHECKS, type ImportFlag } from "@/lib/import-checks";
-import { normalizeRecipient } from "@/lib/known-recipients";
+import { identityKey } from "@/lib/counterparty-identity";
+import { buildRecipientBookRuleMap, buildRecipientCategoryRuleMap, resolveBookId } from "@/lib/book-resolution";
+import { recomputeRecurringGroups } from "@/lib/recurring";
 
 export type ImportRow = {
   date: string;
   amount: number;
   recipient: string | null;
   description: string | null;
+  counterpartyIban: string | null;
+  hasPreciseTime: boolean;
 };
 
 export type ImportAccountOption = {
@@ -60,8 +64,25 @@ export async function saveColumnMapping(
   return { success: !error };
 }
 
-function rowKey(date: string, amount: number, recipient: string | null): string {
-  return `${date.slice(0, 10)}|${amount}|${recipient ? normalizeRecipient(recipient) : ""}`;
+// Time-aware key when the row has a real parsed time (dropping
+// description entirely — it's the least reliable field); falls back to
+// date + amount + counterparty + description otherwise, matching the old
+// behavior for statements that don't carry a parseable time. The
+// counterparty component prefers IBAN over recipient name, same as rules
+// and transfer detection.
+function rowKey(row: {
+  date: string;
+  amount: number;
+  recipient: string | null;
+  counterpartyIban?: string | null;
+  description: string | null;
+  hasPreciseTime: boolean;
+}): string {
+  const counterparty = identityKey({ recipient: row.recipient, counterpartyIban: row.counterpartyIban }) ?? "";
+  if (row.hasPreciseTime) {
+    return `${row.date}|${row.amount}|${counterparty}`;
+  }
+  return `${row.date.slice(0, 10)}|${row.amount}|${counterparty}|${(row.description ?? "").trim().toLowerCase()}`;
 }
 
 export type RowPreview = {
@@ -70,10 +91,10 @@ export type RowPreview = {
   resolvedCategoryName: string | null;
 };
 
-// Row-level dedup (date + amount + recipient against this account's
-// existing transactions) plus a preview of which category a row would be
-// auto-assigned from an existing recipient rule, so the review table can
-// show a subtle "auto" indicator before anything is actually imported.
+// Row-level dedup (against this account's existing transactions) plus a
+// preview of which category a row would be auto-assigned from an existing
+// recipient rule, so the review table can show a subtle "auto" indicator
+// before anything is actually imported.
 export async function previewImportRows(
   accountId: string,
   rows: ImportRow[],
@@ -89,24 +110,37 @@ export async function previewImportRows(
   const [{ data: existing }, { data: rules }, { data: categories }] = await Promise.all([
     supabase
       .from("transactions")
-      .select("occurred_at, amount, recipient")
+      .select("occurred_at, amount, recipient, counterparty_iban, description, has_precise_time")
       .eq("account_id", accountId)
       .eq("user_id", user.id)
       .gte("occurred_at", dates[0])
       .lte("occurred_at", `${dates[dates.length - 1]}T23:59:59`),
-    supabase.from("recipient_category_rules").select("recipient, category_id").eq("user_id", user.id),
+    supabase.from("recipient_category_rules").select("recipient, counterparty_iban, category_id").eq("user_id", user.id),
     supabase.from("categories").select("id, name").eq("user_id", user.id),
   ]);
 
-  const existingKeys = new Set((existing ?? []).map((t) => rowKey(t.occurred_at, t.amount, t.recipient)));
-  const ruleMap = new Map((rules ?? []).map((r) => [normalizeRecipient(r.recipient), r.category_id]));
+  const existingKeys = new Set(
+    (existing ?? []).map((t) =>
+      rowKey({
+        date: t.occurred_at,
+        amount: t.amount,
+        recipient: t.recipient,
+        counterpartyIban: t.counterparty_iban,
+        description: t.description,
+        hasPreciseTime: t.has_precise_time,
+      }),
+    ),
+  );
+  const ruleMap = buildRecipientCategoryRuleMap(
+    (rules ?? []).map((r) => ({ recipient: r.recipient, counterpartyIban: r.counterparty_iban, categoryId: r.category_id })),
+  );
   const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
 
   return rows.map((row) => {
-    const key = row.recipient ? normalizeRecipient(row.recipient) : null;
+    const key = identityKey({ recipient: row.recipient, counterpartyIban: row.counterpartyIban });
     const resolvedCategoryId = key ? (ruleMap.get(key) ?? null) : null;
     return {
-      isDuplicate: existingKeys.has(rowKey(row.date, row.amount, row.recipient)),
+      isDuplicate: existingKeys.has(rowKey(row)),
       resolvedCategoryId,
       resolvedCategoryName: resolvedCategoryId ? (categoryNameById.get(resolvedCategoryId) ?? null) : null,
     };
@@ -173,29 +207,42 @@ export async function importTransactions(
   }
 
   const [{ data: bookRules }, { data: categoryRules }] = await Promise.all([
-    supabase.from("recipient_book_rules").select("recipient, book_id").eq("user_id", user.id),
-    supabase.from("recipient_category_rules").select("recipient, category_id").eq("user_id", user.id),
+    supabase.from("recipient_book_rules").select("recipient, counterparty_iban, book_id").eq("user_id", user.id),
+    supabase.from("recipient_category_rules").select("recipient, counterparty_iban, category_id").eq("user_id", user.id),
   ]);
-  const bookRuleMap = new Map((bookRules ?? []).map((r) => [normalizeRecipient(r.recipient), r.book_id]));
-  const categoryRuleMap = new Map(
-    (categoryRules ?? []).map((r) => [normalizeRecipient(r.recipient), r.category_id]),
+  const bookRuleMap = buildRecipientBookRuleMap(
+    (bookRules ?? []).map((r) => ({ recipient: r.recipient, counterpartyIban: r.counterparty_iban, bookId: r.book_id })),
+  );
+  const categoryRuleMap = buildRecipientCategoryRuleMap(
+    (categoryRules ?? []).map((r) => ({ recipient: r.recipient, counterpartyIban: r.counterparty_iban, categoryId: r.category_id })),
   );
 
   const { error: insertError } = await supabase.from("transactions").insert(
     rows.map((row) => {
-      const key = row.recipient ? normalizeRecipient(row.recipient) : null;
-      const resolvedBook =
-        (key && bookOverrides[key]) || (key && bookRuleMap.get(key)) || account.default_book_id || null;
+      const counterparty = { recipient: row.recipient, counterpartyIban: row.counterpartyIban };
+      const key = identityKey(counterparty);
+      const overrideBook = key ? bookOverrides[key] : undefined;
+      const resolvedBook = resolveBookId({
+        transactionBookId: overrideBook ?? null,
+        counterparty,
+        accountDefaultBookId: account.default_book_id,
+        recipientRules: bookRuleMap,
+      });
       const resolvedCategory = key ? (categoryRuleMap.get(key) ?? null) : null;
       return {
         user_id: user.id,
         account_id: accountId,
         book_id: resolvedBook,
         category_id: resolvedCategory,
+        category_source: resolvedCategory ? ("auto" as const) : null,
+        reviewed_at: null,
         amount: row.amount,
         recipient: row.recipient,
+        counterparty_iban: row.counterpartyIban,
+        description: row.description,
         raw_description: row.description,
         occurred_at: row.date,
+        has_precise_time: row.hasPreciseTime,
         is_recurring: false,
       };
     }),
@@ -221,6 +268,11 @@ export async function importTransactions(
     statement_start_date: statementStartDate,
     statement_end_date: statementEndDate,
   });
+
+  // Best-effort: new rows can extend or newly reveal a recurring pattern,
+  // so groups are recomputed after every import. Never blocks the import
+  // itself from succeeding.
+  await recomputeRecurringGroups(user.id);
 
   return {
     success: true,

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { normalizeRecipient } from "@/lib/known-recipients";
+import { identityKey } from "@/lib/counterparty-identity";
 import type { ImportCheckContext, ImportFlag } from "./types";
 
 export const CHECK_ID = "category-suggestion";
@@ -16,24 +16,26 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
   const supabase = await createClient();
 
   const [{ data: existingRules }, { data: categories }, { data: history }] = await Promise.all([
-    supabase.from("recipient_category_rules").select("recipient").eq("user_id", ctx.userId),
+    supabase.from("recipient_category_rules").select("identity_key").eq("user_id", ctx.userId),
     supabase.from("categories").select("id, name").eq("user_id", ctx.userId),
     supabase
       .from("transactions")
-      .select("recipient, category_id")
+      .select("recipient, counterparty_iban, category_id")
       .eq("user_id", ctx.userId)
       .in("recipient", distinctRecipients)
       .not("category_id", "is", null),
   ]);
 
-  const hasRule = new Set((existingRules ?? []).map((r) => normalizeRecipient(r.recipient)));
+  const hasRule = new Set((existingRules ?? []).map((r) => r.identity_key));
   const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
 
   const countsByRecipient = new Map<string, Map<string, number>>();
+  const ibanByKey = new Map<string, string | null>();
   for (const tx of history ?? []) {
     if (!tx.recipient || !tx.category_id) continue;
-    const key = normalizeRecipient(tx.recipient);
-    if (hasRule.has(key)) continue;
+    const key = identityKey({ recipient: tx.recipient, counterpartyIban: tx.counterparty_iban });
+    if (!key || hasRule.has(key)) continue;
+    ibanByKey.set(key, tx.counterparty_iban);
     const inner = countsByRecipient.get(key) ?? new Map<string, number>();
     inner.set(tx.category_id, (inner.get(tx.category_id) ?? 0) + 1);
     countsByRecipient.set(key, inner);
@@ -51,7 +53,9 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
     }
     if (bestCategoryId && bestCount >= 3) {
       const recipient =
-        ctx.rows.find((r) => r.recipient && normalizeRecipient(r.recipient) === key)?.recipient ?? key;
+        ctx.rows.find(
+          (r) => identityKey({ recipient: r.recipient, counterpartyIban: r.counterpartyIban }) === key,
+        )?.recipient ?? key;
       const categoryName = categoryNameById.get(bestCategoryId) ?? "this category";
       flags.push({
         id: `category-suggestion:${key}`,
@@ -62,7 +66,7 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
           { id: "dismiss", label: "Not now", variant: "secondary" },
           { id: "confirm", label: `Yes, always ${categoryName}`, variant: "primary" },
         ],
-        data: { recipient, categoryId: bestCategoryId },
+        data: { recipient, categoryId: bestCategoryId, counterpartyIban: ibanByKey.get(key) ?? "" },
         blocking: false,
       });
     }

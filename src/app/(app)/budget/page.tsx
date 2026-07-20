@@ -37,7 +37,7 @@ export default async function BudgetPage({
   const [{ data: categories }, progress] = await Promise.all([
     supabase
       .from("categories")
-      .select("id, name, color, icon")
+      .select("id, name, color, icon, kind")
       .order("created_at", { ascending: true }),
     getBudgetProgress(month.from, month.to, bookId),
   ]);

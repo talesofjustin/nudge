@@ -23,6 +23,7 @@ const FIELDS: { key: keyof ColumnMapping; label: string; required: boolean }[] =
   { key: "amount", label: "Amount", required: true },
   { key: "recipient", label: "Recipient", required: false },
   { key: "description", label: "Description", required: false },
+  { key: "counterpartyIban", label: "Counterparty account", required: false },
 ];
 
 type Props = {
@@ -92,7 +93,7 @@ export function MappingStep({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         {FIELDS.map((f) => (
           <Select
             key={f.key}
@@ -220,6 +221,8 @@ export function MappingStep({
                 amount: r.amount!,
                 recipient: r.recipient,
                 description: r.description,
+                counterpartyIban: r.counterpartyIban,
+                hasPreciseTime: r.hasPreciseTime,
               })),
               skippedCount,
               decimalSeparator,

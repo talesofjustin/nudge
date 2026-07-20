@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { normalizeRecipient } from "@/lib/known-recipients";
+import { identityKey } from "@/lib/counterparty-identity";
 import type { FlagItem, ImportCheckContext, ImportFlag } from "./types";
 
 export const CHECK_ID = "book-assignment";
@@ -16,29 +16,32 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
 
   const [{ data: account }, { data: bookRules }, { data: books }] = await Promise.all([
     supabase.from("accounts").select("default_book_id").eq("id", ctx.accountId).single(),
-    supabase.from("recipient_book_rules").select("recipient, book_id").eq("user_id", ctx.userId),
+    supabase.from("recipient_book_rules").select("identity_key, book_id").eq("user_id", ctx.userId),
     supabase.from("books").select("id, name").eq("user_id", ctx.userId).order("created_at", { ascending: true }),
   ]);
 
   if (!books || books.length < 2) return [];
 
-  const ruleMap = new Map((bookRules ?? []).map((r) => [normalizeRecipient(r.recipient), r.book_id]));
+  const ruleMap = new Map((bookRules ?? []).map((r) => [r.identity_key, r.book_id]));
   const accountDefault = account?.default_book_id ?? null;
 
-  const unresolved = new Map<string, string>(); // normalized -> original-cased recipient
+  const unresolved = new Map<string, { recipient: string; counterpartyIban: string | null }>();
   for (const row of ctx.rows) {
     if (!row.recipient) continue;
-    const key = normalizeRecipient(row.recipient);
+    const key = identityKey({ recipient: row.recipient, counterpartyIban: row.counterpartyIban });
+    if (!key) continue;
     const resolved = ruleMap.get(key) ?? accountDefault;
-    if (!resolved && !unresolved.has(key)) unresolved.set(key, row.recipient);
+    if (!resolved && !unresolved.has(key)) {
+      unresolved.set(key, { recipient: row.recipient, counterpartyIban: row.counterpartyIban });
+    }
   }
 
   if (unresolved.size === 0) return [];
 
-  const items: FlagItem[] = Array.from(unresolved.values()).map((recipient) => ({
-    id: `book:${normalizeRecipient(recipient)}`,
-    label: recipient,
-    data: { recipient },
+  const items: FlagItem[] = Array.from(unresolved.entries()).map(([key, entry]) => ({
+    id: `book:${key}`,
+    label: entry.recipient,
+    data: { recipient: entry.recipient, counterpartyIban: entry.counterpartyIban ?? "" },
   }));
 
   return [

@@ -4,26 +4,33 @@ import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { FilterChip } from "@/components/ui/pill";
 import { CategoryBadge, type CategoryInfo } from "@/components/transactions/category-badge";
 import { CATEGORY_ICONS } from "@/lib/category-icons";
 import { CATEGORY_COLOR_SWATCHES } from "@/lib/category-colors";
+import type { CategoryKind } from "@/lib/supabase/database.types";
 
 export function CategoryPicker({
   categories,
   value,
   onChange,
   onCreateCategory,
+  emptyLabel,
+  unreviewed = false,
 }: {
   categories: CategoryInfo[];
   value: string | null;
   onChange: (categoryId: string | null) => void;
-  onCreateCategory: (name: string, color: string, icon: string) => Promise<CategoryInfo | null>;
+  onCreateCategory: (name: string, color: string, icon: string, kind: CategoryKind) => Promise<CategoryInfo | null>;
+  emptyLabel?: string;
+  unreviewed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [color, setColor] = useState(CATEGORY_COLOR_SWATCHES[0]);
   const [icon, setIcon] = useState(Object.keys(CATEGORY_ICONS)[0]);
+  const [kind, setKind] = useState<CategoryKind>("spending");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +41,7 @@ export function CategoryPicker({
     setName("");
     setColor(CATEGORY_COLOR_SWATCHES[0]);
     setIcon(Object.keys(CATEGORY_ICONS)[0]);
+    setKind("spending");
     setError(null);
   }
 
@@ -44,7 +52,7 @@ export function CategoryPicker({
     }
     setSubmitting(true);
     setError(null);
-    const created = await onCreateCategory(name.trim(), color, icon);
+    const created = await onCreateCategory(name.trim(), color, icon, kind);
     setSubmitting(false);
     if (!created) {
       setError("Could not create category.");
@@ -65,7 +73,7 @@ export function CategoryPicker({
     >
       <PopoverTrigger asChild>
         <button type="button" className="cursor-pointer rounded-full transition-opacity hover:opacity-80">
-          <CategoryBadge category={current} />
+          <CategoryBadge category={current} emptyLabel={emptyLabel} unreviewed={unreviewed} />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64">
@@ -117,6 +125,18 @@ export function CategoryPicker({
               placeholder="e.g. Pets"
               autoFocus
             />
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-medium text-muted">Kind</span>
+              <div className="flex gap-2">
+                <FilterChip active={kind === "spending"} onClick={() => setKind("spending")}>
+                  Spending
+                </FilterChip>
+                <FilterChip active={kind === "saving"} onClick={() => setKind("saving")}>
+                  Saving
+                </FilterChip>
+              </div>
+            </div>
 
             <div className="flex flex-col gap-1.5">
               <span className="text-[13px] font-medium text-muted">Color</span>

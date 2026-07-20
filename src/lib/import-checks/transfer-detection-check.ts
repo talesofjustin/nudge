@@ -1,19 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
-import { normalizeRecipient } from "@/lib/known-recipients";
+import { identityKey } from "@/lib/counterparty-identity";
 import type { FlagItem, ImportCheckContext, ImportFlag } from "./types";
 
 export const CHECK_ID = "transfer-detection";
 
-type RecipientAgg = { recipient: string; inCount: number; outCount: number };
+type RecipientAgg = { recipient: string; counterpartyIban: string | null; inCount: number; outCount: number };
 
 function addToAgg(
   map: Map<string, RecipientAgg>,
-  recipient: string | null,
+  counterparty: { recipient: string | null; counterpartyIban?: string | null },
   amount: number,
 ): void {
-  if (!recipient) return;
-  const key = normalizeRecipient(recipient);
-  const existing = map.get(key) ?? { recipient, inCount: 0, outCount: 0 };
+  const key = identityKey(counterparty);
+  if (!key || !counterparty.recipient) return;
+  const existing =
+    map.get(key) ?? {
+      recipient: counterparty.recipient,
+      counterpartyIban: counterparty.counterpartyIban ?? null,
+      inCount: 0,
+      outCount: 0,
+    };
   if (amount > 0) existing.inCount++;
   else if (amount < 0) existing.outCount++;
   map.set(key, existing);
@@ -23,7 +29,7 @@ function addToAgg(
 // out with meaningful frequency — combining the rows being imported with the
 // user's existing history for that recipient (history alone, or the new
 // file alone, might not show the pattern; together they often do). Skips
-// any recipient the user has already made a decision about (a
+// any counterparty the user has already made a decision about (a
 // known_recipients row exists either way, true or false).
 export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
   const distinctRecipients = Array.from(
@@ -34,22 +40,24 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
   const supabase = await createClient();
 
   const agg = new Map<string, RecipientAgg>();
-  for (const row of ctx.rows) addToAgg(agg, row.recipient, row.amount);
+  for (const row of ctx.rows) addToAgg(agg, row, row.amount);
 
   if (ctx.accountId) {
     const { data: existingTx } = await supabase
       .from("transactions")
-      .select("recipient, amount")
+      .select("recipient, counterparty_iban, amount")
       .eq("user_id", ctx.userId)
       .in("recipient", distinctRecipients);
-    for (const tx of existingTx ?? []) addToAgg(agg, tx.recipient, tx.amount);
+    for (const tx of existingTx ?? []) {
+      addToAgg(agg, { recipient: tx.recipient, counterpartyIban: tx.counterparty_iban }, tx.amount);
+    }
   }
 
   const { data: known } = await supabase
     .from("known_recipients")
-    .select("recipient")
+    .select("identity_key")
     .eq("user_id", ctx.userId);
-  const decided = new Set((known ?? []).map((k) => normalizeRecipient(k.recipient)));
+  const decided = new Set((known ?? []).map((k) => k.identity_key));
 
   const items: FlagItem[] = [];
   for (const [key, entry] of agg) {
@@ -62,7 +70,7 @@ export async function run(ctx: ImportCheckContext): Promise<ImportFlag[]> {
           { id: "count", label: "Yes, count them normally", variant: "secondary" },
           { id: "exclude", label: "No, exclude them (it's a transfer)", variant: "primary" },
         ],
-        data: { recipient: entry.recipient },
+        data: { recipient: entry.recipient, counterpartyIban: entry.counterpartyIban ?? "" },
       });
     }
   }

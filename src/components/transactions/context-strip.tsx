@@ -61,6 +61,9 @@ export function ContextStrip({
   showOnlyUnassignedBook,
   onToggleUnassignedBook,
   showBookFeature,
+  unreviewedCount,
+  showOnlyUnreviewed,
+  onToggleUnreviewed,
   duplicateCount,
   duplicateBannerDismissed,
   onReviewDuplicates,
@@ -68,9 +71,11 @@ export function ContextStrip({
   selectedCount,
   confirmingDelete,
   deleting,
+  marking,
   onStartConfirmDelete,
   onCancelDelete,
   onConfirmDelete,
+  onMarkReviewed,
 }: {
   dateFrom: string;
   dateTo: string;
@@ -82,6 +87,9 @@ export function ContextStrip({
   showOnlyUnassignedBook: boolean;
   onToggleUnassignedBook: () => void;
   showBookFeature: boolean;
+  unreviewedCount: number;
+  showOnlyUnreviewed: boolean;
+  onToggleUnreviewed: () => void;
   duplicateCount: number;
   duplicateBannerDismissed: boolean;
   onReviewDuplicates: () => void;
@@ -89,9 +97,11 @@ export function ContextStrip({
   selectedCount: number;
   confirmingDelete: boolean;
   deleting: boolean;
+  marking: boolean;
   onStartConfirmDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
+  onMarkReviewed: () => void;
 }) {
   return (
     <div className="border-b border-border">
@@ -146,6 +156,15 @@ export function ContextStrip({
               <span className="text-muted">·</span>
               <button
                 type="button"
+                onClick={onMarkReviewed}
+                disabled={marking}
+                className="font-medium text-violet-600 hover:underline disabled:opacity-50"
+              >
+                {marking ? "Marking…" : "Mark as reviewed"}
+              </button>
+              <span className="text-muted">·</span>
+              <button
+                type="button"
                 onClick={onStartConfirmDelete}
                 className="font-medium text-danger hover:underline"
               >
@@ -163,6 +182,11 @@ export function ContextStrip({
             {showBookFeature && unassignedBookCount > 0 && (
               <StatusChip tone="violet" active={showOnlyUnassignedBook} onClick={onToggleUnassignedBook}>
                 {unassignedBookCount} need a book
+              </StatusChip>
+            )}
+            {unreviewedCount > 0 && (
+              <StatusChip tone="violet" active={showOnlyUnreviewed} onClick={onToggleUnreviewed}>
+                {unreviewedCount} auto-categorised, not yet reviewed
               </StatusChip>
             )}
           </div>

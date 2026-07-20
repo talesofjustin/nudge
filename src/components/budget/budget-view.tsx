@@ -150,6 +150,7 @@ export function BudgetView({
         <BudgetSummary
           totalBudgeted={progress.totalBudgeted}
           totalSpent={progress.totalSpent}
+          totalSaved={progress.totalSaved}
           dayOfMonth={dayOfMonth}
           totalDays={totalDays}
           isCurrentMonth={isCurrentMonth}

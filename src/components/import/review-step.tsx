@@ -11,6 +11,7 @@ import {
   type RowPreview,
 } from "@/app/(app)/import/actions";
 import { resolveTransferFlag, setRecipientBookRule, setRecipientCategoryRule } from "@/app/(app)/transactions/actions";
+import { identityKey } from "@/lib/counterparty-identity";
 import type { BookInfo } from "@/components/transactions/book-picker";
 import type { ImportFlag } from "@/lib/import-checks";
 
@@ -104,15 +105,16 @@ export function ReviewStep({
 
   async function handleFlagAction(flag: FlagState, actionId: string) {
     if (flag.checkId === "category-suggestion" && actionId === "confirm" && flag.data?.recipient && flag.data?.categoryId) {
-      await setRecipientCategoryRule(flag.data.recipient, flag.data.categoryId);
+      await setRecipientCategoryRule(flag.data.recipient, flag.data.categoryId, flag.data.counterpartyIban || null);
     }
     setFlags((prev) => prev.map((f) => (f.id === flag.id ? { ...f, resolved: true } : f)));
   }
 
   async function handleTransferItemAction(flag: FlagState, item: ItemState, actionId: string) {
     if (item.data?.recipient) {
-      if (actionId === "exclude") await resolveTransferFlag(item.data.recipient, true);
-      if (actionId === "count") await resolveTransferFlag(item.data.recipient, false);
+      const iban = item.data.counterpartyIban || null;
+      if (actionId === "exclude") await resolveTransferFlag(item.data.recipient, true, iban);
+      if (actionId === "count") await resolveTransferFlag(item.data.recipient, false, iban);
     }
     setFlags((prev) =>
       prev.map((f) =>
@@ -125,9 +127,11 @@ export function ReviewStep({
 
   async function handleBookItemResolve(flag: FlagState, item: ItemState, bookId: string, remember: boolean) {
     const recipient = item.data?.recipient;
+    const counterpartyIban = item.data?.counterpartyIban || null;
     if (recipient) {
-      setBookOverrides((prev) => ({ ...prev, [recipient.trim().toLowerCase()]: bookId }));
-      if (remember) await setRecipientBookRule(recipient, bookId);
+      const key = identityKey({ recipient, counterpartyIban });
+      if (key) setBookOverrides((prev) => ({ ...prev, [key]: bookId }));
+      if (remember) await setRecipientBookRule(recipient, bookId, counterpartyIban);
     }
     setFlags((prev) =>
       prev.map((f) =>
@@ -324,6 +328,8 @@ export function ReviewStep({
                 amount: r.amount,
                 recipient: r.recipient,
                 description: r.description,
+                counterpartyIban: r.counterpartyIban,
+                hasPreciseTime: r.hasPreciseTime,
               })),
               bookOverrides,
             )

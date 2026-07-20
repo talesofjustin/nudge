@@ -1,4 +1,6 @@
 import type { DecimalSeparator } from "@/lib/supabase/database.types";
+import { extractCounterpartyIban, extractTransactionTime } from "@/lib/parse-raw-description";
+import { normalizeIban } from "@/lib/counterparty-identity";
 
 export type ParsedRow = Record<string, string>;
 
@@ -11,6 +13,10 @@ export type ColumnMapping = {
   // generic "Debit/Credit" column). When set, its value overrides whatever
   // sign the amount column itself has.
   sign: string | null;
+  // Optional dedicated counterparty-account column (e.g. ING's
+  // "Tegenrekening"). When absent, it's parsed from the description's
+  // embedded "IBAN:" field instead — see lib/parse-raw-description.ts.
+  counterpartyIban: string | null;
 };
 
 const DATE_HINTS = ["date", "datum", "posted", "transaction date"];
@@ -18,6 +24,7 @@ const AMOUNT_HINTS = ["amount", "bedrag", "value", "debit", "credit", "total"];
 const RECIPIENT_HINTS = ["payee", "recipient", "merchant", "naam", "name"];
 const DESCRIPTION_HINTS = ["description", "mededeling", "memo", "note", "details"];
 const SIGN_HINTS = ["af bij", "af/bij", "debit/credit", "credit/debit", "dr/cr", "cr/dr", "type"];
+const COUNTERPARTY_IBAN_HINTS = ["tegenrekening", "counterparty", "counter party", "iban"];
 
 function guessColumn(headers: string[], hints: string[]): string | null {
   const lower = headers.map((h) => h.toLowerCase());
@@ -35,6 +42,7 @@ export function guessColumnMapping(headers: string[]): ColumnMapping {
     recipient: guessColumn(headers, RECIPIENT_HINTS),
     description: guessColumn(headers, DESCRIPTION_HINTS),
     sign: guessColumn(headers, SIGN_HINTS),
+    counterpartyIban: guessColumn(headers, COUNTERPARTY_IBAN_HINTS),
   };
 }
 
@@ -203,6 +211,8 @@ export type MappedRow = {
   amount: number | null;
   recipient: string | null;
   description: string | null;
+  counterpartyIban: string | null;
+  hasPreciseTime: boolean;
   valid: boolean;
 };
 
@@ -212,7 +222,7 @@ export function mapRows(
   options: MapRowsOptions,
 ): MappedRow[] {
   return rows.map((raw) => {
-    const date = mapping.date ? parseDate(raw[mapping.date], options.timezone) : null;
+    let date = mapping.date ? parseDate(raw[mapping.date], options.timezone) : null;
     let amount = mapping.amount
       ? parseAmount(raw[mapping.amount], options.decimalSeparator)
       : null;
@@ -226,12 +236,29 @@ export function mapRows(
     const recipient = mapping.recipient ? cleanField(raw[mapping.recipient]) : null;
     const description = mapping.description ? cleanField(raw[mapping.description]) : null;
 
+    // Normalized once at the point of entry (no spaces, uppercase) so every
+    // downstream table that stores counterparty_iban — transactions, rule
+    // tables — agrees on the exact same string, matching the DB-generated
+    // identity_key columns that key off it directly.
+    const mappedIban = mapping.counterpartyIban ? cleanField(raw[mapping.counterpartyIban]) : null;
+    const rawIban = mappedIban ?? extractCounterpartyIban(description);
+    const counterpartyIban = rawIban ? normalizeIban(rawIban) : null;
+
+    const time = extractTransactionTime(description);
+    let hasPreciseTime = false;
+    if (date && time) {
+      date = `${date.slice(0, 10)}T${time}.000Z`;
+      hasPreciseTime = true;
+    }
+
     return {
       raw,
       date,
       amount,
       recipient,
       description,
+      counterpartyIban,
+      hasPreciseTime,
       valid: date !== null && amount !== null,
     };
   });

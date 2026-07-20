@@ -1,18 +1,20 @@
-import { normalizeRecipient } from "@/lib/known-recipients";
+import { identityKey, type Counterparty } from "@/lib/counterparty-identity";
 
 // Three-layer resolution, read-only: callers decide when to persist the
 // result. Explicit transaction-level assignment always wins; then a
-// recipient rule; then the account's default; otherwise unassigned.
+// recipient rule (matched by identity — IBAN first, recipient name
+// otherwise); then the account's default; otherwise unassigned.
 export function resolveBookId(inputs: {
   transactionBookId: string | null;
-  recipient: string | null;
+  counterparty: Counterparty;
   accountDefaultBookId: string | null;
   recipientRules: Map<string, string>;
 }): string | null {
   if (inputs.transactionBookId) return inputs.transactionBookId;
 
-  if (inputs.recipient) {
-    const rule = inputs.recipientRules.get(normalizeRecipient(inputs.recipient));
+  const key = identityKey(inputs.counterparty);
+  if (key) {
+    const rule = inputs.recipientRules.get(key);
     if (rule) return rule;
   }
 
@@ -22,21 +24,23 @@ export function resolveBookId(inputs: {
 }
 
 export function buildRecipientBookRuleMap(
-  rules: { recipient: string; bookId: string }[],
+  rules: { recipient: string; counterpartyIban?: string | null; bookId: string }[],
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const rule of rules) {
-    map.set(normalizeRecipient(rule.recipient), rule.bookId);
+    const key = identityKey({ recipient: rule.recipient, counterpartyIban: rule.counterpartyIban });
+    if (key) map.set(key, rule.bookId);
   }
   return map;
 }
 
 export function buildRecipientCategoryRuleMap(
-  rules: { recipient: string; categoryId: string }[],
+  rules: { recipient: string; counterpartyIban?: string | null; categoryId: string }[],
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const rule of rules) {
-    map.set(normalizeRecipient(rule.recipient), rule.categoryId);
+    const key = identityKey({ recipient: rule.recipient, counterpartyIban: rule.counterpartyIban });
+    if (key) map.set(key, rule.categoryId);
   }
   return map;
 }

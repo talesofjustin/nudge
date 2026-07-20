@@ -9,6 +9,7 @@ export type ImportCheckRow = {
   amount: number;
   recipient: string | null;
   description: string | null;
+  counterpartyIban: string | null;
 };
 
 export type ImportCheckContext = {

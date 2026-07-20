@@ -1,11 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserSettings } from "@/lib/user-settings";
 import { getProfile, getAccountsForSettings, getBooksForSettings } from "@/app/(app)/settings/actions";
-import {
-  getKnownRecipients,
-  getRecipientBookRules,
-  getRecipientCategoryRules,
-} from "@/app/(app)/transactions/actions";
+import { getAllRules } from "@/app/(app)/transactions/actions";
 import { SettingsForm } from "@/components/settings/settings-form";
 import { ProfilePanel } from "@/components/settings/profile-panel";
 import { AppearancePanel } from "@/components/settings/appearance-panel";
@@ -13,29 +9,17 @@ import { AccountsManager } from "@/components/settings/accounts-manager";
 import { BooksManager } from "@/components/settings/books-manager";
 import { RulesManager } from "@/components/settings/rules-manager";
 import { CategoriesManager } from "@/components/settings/categories-manager";
-import { KnownRecipientsManager } from "@/components/settings/known-recipients-manager";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
 
-  const [
-    settings,
-    profile,
-    accounts,
-    books,
-    { data: categories },
-    bookRules,
-    categoryRules,
-    knownRecipients,
-  ] = await Promise.all([
+  const [settings, profile, accounts, books, { data: categories }, rules] = await Promise.all([
     getUserSettings(),
     getProfile(),
     getAccountsForSettings(),
     getBooksForSettings(),
-    supabase.from("categories").select("id, name, color, icon").order("created_at", { ascending: true }),
-    getRecipientBookRules(),
-    getRecipientCategoryRules(),
-    getKnownRecipients(),
+    supabase.from("categories").select("id, name, color, icon, kind").order("created_at", { ascending: true }),
+    getAllRules(),
   ]);
 
   const showBookFeature = books.length > 1;
@@ -54,15 +38,8 @@ export default async function SettingsPage() {
       <AppearancePanel initialTheme={settings.theme ?? "system"} />
       <AccountsManager accounts={accounts} books={books} />
       <BooksManager books={books} />
-      <RulesManager
-        bookRules={bookRules}
-        categoryRules={categoryRules}
-        books={books}
-        categories={categories ?? []}
-        showBookFeature={showBookFeature}
-      />
+      <RulesManager rules={rules} books={books} categories={categories ?? []} showBookFeature={showBookFeature} />
       <CategoriesManager categories={categories ?? []} />
-      <KnownRecipientsManager knownRecipients={knownRecipients} />
     </div>
   );
 }

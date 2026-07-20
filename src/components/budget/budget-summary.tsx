@@ -1,6 +1,7 @@
 export function BudgetSummary({
   totalBudgeted,
   totalSpent,
+  totalSaved,
   dayOfMonth,
   totalDays,
   isCurrentMonth,
@@ -8,6 +9,7 @@ export function BudgetSummary({
 }: {
   totalBudgeted: number;
   totalSpent: number;
+  totalSaved: number;
   dayOfMonth: number;
   totalDays: number;
   isCurrentMonth: boolean;
@@ -42,6 +44,14 @@ export function BudgetSummary({
               {Math.abs(remaining).toFixed(2)}
             </p>
           </div>
+          {totalSaved > 0 && (
+            <div>
+              <p className="text-[11px] font-medium tracking-wide text-muted uppercase">Saved</p>
+              <p className="mt-0.5 text-[20px] font-semibold text-mint tabular-nums">
+                €{totalSaved.toFixed(2)}
+              </p>
+            </div>
+          )}
         </div>
 
         {isCurrentMonth && (

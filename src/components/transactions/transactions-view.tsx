@@ -8,12 +8,13 @@ import { TransactionRow } from "@/components/transactions/transaction-row";
 import { DuplicateReview } from "@/components/transactions/duplicate-review";
 import type { CategoryInfo } from "@/components/transactions/category-badge";
 import type { BookInfo } from "@/components/transactions/book-picker";
-import { normalizeRecipient } from "@/lib/known-recipients";
+import { identityKey } from "@/lib/counterparty-identity";
 import {
   getFilteredTransactions,
   updateTransaction,
   createCategory,
   deleteTransactions,
+  markTransactionsReviewed,
   getRecipientBookRules,
   setRecipientBookRule,
   getRecipientCategoryRules,
@@ -23,6 +24,7 @@ import {
   type DuplicateGroup,
 } from "@/app/(app)/transactions/actions";
 import { filtersToSearchParams, type FiltersState } from "@/lib/transaction-filters";
+import type { CategoryKind } from "@/lib/supabase/database.types";
 
 type ColumnAlign = "left" | "right" | "center";
 
@@ -66,8 +68,10 @@ export function TransactionsView({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [marking, setMarking] = useState(false);
   const [showOnlyUncategorized, setShowOnlyUncategorized] = useState(false);
   const [showOnlyUnassignedBook, setShowOnlyUnassignedBook] = useState(false);
+  const [showOnlyUnreviewed, setShowOnlyUnreviewed] = useState(false);
   const [bookRules, setBookRules] = useState<Map<string, string>>(new Map());
   const [categoryRules, setCategoryRules] = useState<Map<string, string>>(new Map());
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
@@ -87,18 +91,32 @@ export function TransactionsView({
         getRecipientCategoryRules(),
         getDuplicateGroups(),
       ]);
-      setBookRules(new Map(bookRuleList.map((r) => [normalizeRecipient(r.recipient), r.bookId])));
-      setCategoryRules(new Map(categoryRuleList.map((r) => [normalizeRecipient(r.recipient), r.categoryId])));
+      setBookRules(
+        new Map(
+          bookRuleList
+            .map((r) => [identityKey({ recipient: r.recipient, counterpartyIban: r.counterpartyIban }), r.bookId] as const)
+            .filter((entry): entry is [string, string] => entry[0] !== null),
+        ),
+      );
+      setCategoryRules(
+        new Map(
+          categoryRuleList
+            .map((r) => [identityKey({ recipient: r.recipient, counterpartyIban: r.counterpartyIban }), r.categoryId] as const)
+            .filter((entry): entry is [string, string] => entry[0] !== null),
+        ),
+      );
       setDuplicateGroups(duplicates);
     })();
   }, []);
 
   const uncategorizedCount = rows.filter((r) => !r.categoryId && !r.isTransfer).length;
   const unassignedBookCount = showBookFeature ? rows.filter((r) => !r.bookId).length : 0;
+  const unreviewedCount = rows.filter((r) => r.categorySource === "auto" && !r.reviewedAt).length;
 
   const visibleRows = rows.filter((r) => {
     if (showOnlyUncategorized && (r.categoryId || r.isTransfer)) return false;
     if (showOnlyUnassignedBook && r.bookId) return false;
+    if (showOnlyUnreviewed && !(r.categorySource === "auto" && !r.reviewedAt)) return false;
     return true;
   });
 
@@ -153,18 +171,37 @@ export function TransactionsView({
 
   function handleUpdate(
     id: string,
-    updates: { description?: string; categoryId?: string | null; isRecurring?: boolean; bookId?: string | null },
+    updates: {
+      description?: string;
+      categoryId?: string | null;
+      categorySource?: "manual" | "auto" | null;
+      reviewedAt?: string | null;
+      isRecurring?: boolean;
+      bookId?: string | null;
+    },
   ) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...toRowPatch(updates) } : r)));
     void updateTransaction(id, updates);
+  }
+
+  async function handleDeleteRow(id: string) {
+    setRows((prev) => prev.filter((r) => r.id !== id));
+    setSelectedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    await deleteTransactions([id]);
   }
 
   async function handleCreateCategory(
     name: string,
     color: string,
     icon: string,
+    kind: CategoryKind,
   ): Promise<CategoryInfo | null> {
-    const created = await createCategory(name, color, icon);
+    const created = await createCategory(name, color, icon, kind);
     if (created) {
       setCategories((prev) => [...prev, created]);
     }
@@ -172,13 +209,17 @@ export function TransactionsView({
   }
 
   async function handleOfferBookRule(recipient: string, bookId: string) {
-    setBookRules((prev) => new Map(prev).set(normalizeRecipient(recipient), bookId));
-    await setRecipientBookRule(recipient, bookId);
+    const row = rows.find((r) => r.recipient === recipient);
+    const key = identityKey({ recipient, counterpartyIban: row?.counterpartyIban });
+    if (key) setBookRules((prev) => new Map(prev).set(key, bookId));
+    await setRecipientBookRule(recipient, bookId, row?.counterpartyIban ?? null);
   }
 
   async function handleOfferCategoryRule(recipient: string, categoryId: string) {
-    setCategoryRules((prev) => new Map(prev).set(normalizeRecipient(recipient), categoryId));
-    await setRecipientCategoryRule(recipient, categoryId);
+    const row = rows.find((r) => r.recipient === recipient);
+    const key = identityKey({ recipient, counterpartyIban: row?.counterpartyIban });
+    if (key) setCategoryRules((prev) => new Map(prev).set(key, categoryId));
+    await setRecipientCategoryRule(recipient, categoryId, row?.counterpartyIban ?? null);
   }
 
   function toggleSelect(id: string) {
@@ -207,6 +248,18 @@ export function TransactionsView({
       setSelectedIds(new Set());
     } else {
       setError(res.error ?? "Could not delete the selected transactions.");
+    }
+  }
+
+  async function handleBulkMarkReviewed() {
+    setMarking(true);
+    const ids = Array.from(selectedIds);
+    const res = await markTransactionsReviewed(ids);
+    setMarking(false);
+    if (res.success) {
+      const now = new Date().toISOString();
+      setRows((prev) => prev.map((r) => (selectedIds.has(r.id) ? { ...r, reviewedAt: now } : r)));
+      setSelectedIds(new Set());
     }
   }
 
@@ -251,6 +304,9 @@ export function TransactionsView({
         showOnlyUnassignedBook={showOnlyUnassignedBook}
         onToggleUnassignedBook={() => setShowOnlyUnassignedBook((v) => !v)}
         showBookFeature={showBookFeature}
+        unreviewedCount={unreviewedCount}
+        showOnlyUnreviewed={showOnlyUnreviewed}
+        onToggleUnreviewed={() => setShowOnlyUnreviewed((v) => !v)}
         duplicateCount={duplicateGroups?.reduce((sum, g) => sum + g.transactions.length, 0) ?? 0}
         duplicateBannerDismissed={duplicateBannerDismissed}
         onReviewDuplicates={() => setReviewingDuplicates(true)}
@@ -258,9 +314,11 @@ export function TransactionsView({
         selectedCount={selectedIds.size}
         confirmingDelete={confirmingDelete}
         deleting={deleting}
+        marking={marking}
         onStartConfirmDelete={() => setConfirmingDelete(true)}
         onCancelDelete={() => setConfirmingDelete(false)}
         onConfirmDelete={handleBulkDelete}
+        onMarkReviewed={handleBulkMarkReviewed}
       />
 
       {reviewingDuplicates && duplicateGroups ? (
@@ -286,7 +344,9 @@ export function TransactionsView({
                 ? "No uncategorized transactions in this period."
                 : showOnlyUnassignedBook
                   ? "No transactions need a book in this period."
-                  : "No transactions match these filters."}
+                  : showOnlyUnreviewed
+                    ? "No auto-categorised transactions waiting for review."
+                    : "No transactions match these filters."}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -320,25 +380,29 @@ export function TransactionsView({
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleRows.map((row) => (
-                    <TransactionRow
-                      key={row.id}
-                      row={row}
-                      accountName={accountsById.get(row.accountId) ?? "Unknown account"}
-                      books={books}
-                      categories={categories}
-                      showBookColumn={showBookFeature}
-                      selected={selectedIds.has(row.id)}
-                      hasBookRule={!!row.recipient && bookRules.has(normalizeRecipient(row.recipient))}
-                      hasCategoryRule={!!row.recipient && categoryRules.has(normalizeRecipient(row.recipient))}
-                      onToggleSelect={toggleSelect}
-                      onUpdate={handleUpdate}
-                      onFilterByRecipient={handleFilterByRecipient}
-                      onCreateCategory={handleCreateCategory}
-                      onOfferBookRule={handleOfferBookRule}
-                      onOfferCategoryRule={handleOfferCategoryRule}
-                    />
-                  ))}
+                  {visibleRows.map((row) => {
+                    const key = identityKey({ recipient: row.recipient, counterpartyIban: row.counterpartyIban });
+                    return (
+                      <TransactionRow
+                        key={row.id}
+                        row={row}
+                        accountName={accountsById.get(row.accountId) ?? "Unknown account"}
+                        books={books}
+                        categories={categories}
+                        showBookColumn={showBookFeature}
+                        selected={selectedIds.has(row.id)}
+                        bookRuleTargetId={key ? (bookRules.get(key) ?? null) : null}
+                        categoryRuleTargetId={key ? (categoryRules.get(key) ?? null) : null}
+                        onToggleSelect={toggleSelect}
+                        onUpdate={handleUpdate}
+                        onDelete={handleDeleteRow}
+                        onFilterByRecipient={handleFilterByRecipient}
+                        onCreateCategory={handleCreateCategory}
+                        onOfferBookRule={handleOfferBookRule}
+                        onOfferCategoryRule={handleOfferCategoryRule}
+                      />
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -352,12 +416,16 @@ export function TransactionsView({
 function toRowPatch(updates: {
   description?: string;
   categoryId?: string | null;
+  categorySource?: "manual" | "auto" | null;
+  reviewedAt?: string | null;
   isRecurring?: boolean;
   bookId?: string | null;
 }): Partial<TransactionRowData> {
   const patch: Partial<TransactionRowData> = {};
   if (updates.description !== undefined) patch.description = updates.description;
   if (updates.categoryId !== undefined) patch.categoryId = updates.categoryId;
+  if (updates.categorySource !== undefined) patch.categorySource = updates.categorySource;
+  if (updates.reviewedAt !== undefined) patch.reviewedAt = updates.reviewedAt;
   if (updates.isRecurring !== undefined) patch.isRecurring = updates.isRecurring;
   if (updates.bookId !== undefined) patch.bookId = updates.bookId;
   return patch;

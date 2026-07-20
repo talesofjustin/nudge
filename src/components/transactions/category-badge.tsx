@@ -1,18 +1,27 @@
 import { Pill } from "@/components/ui/pill";
 import { TagIcon, TransferIcon } from "@/components/icons/dashboard-icons";
 import { CATEGORY_ICONS } from "@/lib/category-icons";
+import type { CategoryKind } from "@/lib/supabase/database.types";
 
-export type CategoryInfo = { id: string; name: string; color: string; icon: string };
+export type CategoryInfo = { id: string; name: string; color: string; icon: string; kind: CategoryKind };
 
 export function CategoryBadge({
   category,
   className = "",
+  emptyLabel = "Uncategorized",
+  // Auto-applied by a recipient rule on import, not yet consciously passed
+  // over by the user — dashed outline + reduced opacity, cleared the
+  // moment the category picker is used on this row (even reselecting the
+  // same value counts as review).
+  unreviewed = false,
 }: {
   category: CategoryInfo | null;
   className?: string;
+  emptyLabel?: string;
+  unreviewed?: boolean;
 }) {
   if (!category) {
-    return <Pill className={className}>Uncategorized</Pill>;
+    return <Pill className={className}>{emptyLabel}</Pill>;
   }
 
   const Icon = CATEGORY_ICONS[category.icon] ?? TagIcon;
@@ -25,10 +34,13 @@ export function CategoryBadge({
 
   return (
     <span
-      className={`inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium ${className}`}
+      className={`inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium ${
+        unreviewed ? "border border-dashed opacity-70" : ""
+      } ${className}`}
       style={{
         backgroundColor: `color-mix(in srgb, ${category.color} 18%, var(--tint-base))`,
         color: textColor,
+        ...(unreviewed && { borderColor: textColor }),
       }}
     >
       <Icon className="h-3.5 w-3.5" />

@@ -29,7 +29,7 @@ export default async function TransactionsPage({
         .order("created_at", { ascending: true }),
       supabase
         .from("categories")
-        .select("id, name, color, icon")
+        .select("id, name, color, icon, kind")
         .order("created_at", { ascending: true }),
       getFilteredTransactions({
         bookId: filters.bookId,

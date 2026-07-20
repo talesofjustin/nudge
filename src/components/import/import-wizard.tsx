@@ -28,6 +28,7 @@ const EMPTY_MAPPING: ColumnMapping = {
   recipient: null,
   description: null,
   sign: null,
+  counterpartyIban: null,
 };
 
 export function ImportWizard({
@@ -103,6 +104,7 @@ export function ImportWizard({
             recipient: saved.recipient,
             description: saved.description,
             sign: saved.sign,
+            counterpartyIban: saved.counterpartyIban,
           };
           const mapped = mapRows(results.data, savedMapping, {
             decimalSeparator: saved.decimalSeparator,
@@ -116,6 +118,8 @@ export function ImportWizard({
               amount: r.amount!,
               recipient: r.recipient,
               description: r.description,
+              counterpartyIban: r.counterpartyIban,
+              hasPreciseTime: r.hasPreciseTime,
             })),
           );
           setPendingSkippedCount(mapped.length - validRows.length);

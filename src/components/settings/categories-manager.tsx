@@ -5,22 +5,25 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { FilterChip } from "@/components/ui/pill";
 import { CategoryBadge, type CategoryInfo } from "@/components/transactions/category-badge";
 import { CATEGORY_ICONS } from "@/lib/category-icons";
 import { CATEGORY_COLOR_SWATCHES } from "@/lib/category-colors";
 import { createCategory, updateCategory, deleteCategory } from "@/app/(app)/transactions/actions";
+import type { CategoryKind } from "@/lib/supabase/database.types";
 
 function EditPopover({
   category,
   onSave,
 }: {
   category: CategoryInfo;
-  onSave: (updates: { name: string; color: string; icon: string }) => void;
+  onSave: (updates: { name: string; color: string; icon: string; kind: CategoryKind }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(category.name);
   const [color, setColor] = useState(category.color);
   const [icon, setIcon] = useState(category.icon);
+  const [kind, setKind] = useState<CategoryKind>(category.kind);
 
   return (
     <Popover
@@ -31,6 +34,7 @@ function EditPopover({
           setName(category.name);
           setColor(category.color);
           setIcon(category.icon);
+          setKind(category.kind);
         }
       }}
     >
@@ -42,6 +46,18 @@ function EditPopover({
       <PopoverContent className="w-64">
         <div className="flex flex-col gap-3">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-medium text-muted">Kind</span>
+            <div className="flex gap-2">
+              <FilterChip active={kind === "spending"} onClick={() => setKind("spending")}>
+                Spending
+              </FilterChip>
+              <FilterChip active={kind === "saving"} onClick={() => setKind("saving")}>
+                Saving
+              </FilterChip>
+            </div>
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <span className="text-[13px] font-medium text-muted">Color</span>
@@ -85,7 +101,7 @@ function EditPopover({
             className="mt-1 h-9 w-full text-[13px]"
             onClick={() => {
               if (!name.trim()) return;
-              onSave({ name: name.trim(), color, icon });
+              onSave({ name: name.trim(), color, icon, kind });
               setOpen(false);
             }}
           >
@@ -103,6 +119,7 @@ export function CategoriesManager({ categories: initial }: { categories: Categor
   const [name, setName] = useState("");
   const [color, setColor] = useState(CATEGORY_COLOR_SWATCHES[0]);
   const [icon, setIcon] = useState(Object.keys(CATEGORY_ICONS)[0]);
+  const [kind, setKind] = useState<CategoryKind>("spending");
   const [submitting, setSubmitting] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -111,12 +128,13 @@ export function CategoriesManager({ categories: initial }: { categories: Categor
     setName("");
     setColor(CATEGORY_COLOR_SWATCHES[0]);
     setIcon(Object.keys(CATEGORY_ICONS)[0]);
+    setKind("spending");
   }
 
   async function handleCreate() {
     if (!name.trim()) return;
     setSubmitting(true);
-    const created = await createCategory(name.trim(), color, icon);
+    const created = await createCategory(name.trim(), color, icon, kind);
     setSubmitting(false);
     if (created) setCategories((prev) => [...prev, created]);
     resetCreateForm();
@@ -144,6 +162,17 @@ export function CategoriesManager({ categories: initial }: { categories: Categor
       {creating && (
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-canvas p-4">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus className="max-w-xs" />
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-medium text-muted">Kind</span>
+            <div className="flex gap-2">
+              <FilterChip active={kind === "spending"} onClick={() => setKind("spending")}>
+                Spending
+              </FilterChip>
+              <FilterChip active={kind === "saving"} onClick={() => setKind("saving")}>
+                Saving
+              </FilterChip>
+            </div>
+          </div>
           <div className="flex flex-col gap-1.5">
             <span className="text-[13px] font-medium text-muted">Color</span>
             <div className="flex flex-wrap gap-2">

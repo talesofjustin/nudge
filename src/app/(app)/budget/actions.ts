@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildOwnAccountSet, isTransferRecipient } from "@/lib/known-recipients";
 import { financialMonthBudgetKey, shiftFinancialMonth } from "@/lib/financial-month";
 import { getUserSettings, upsertUserSettings } from "@/lib/user-settings";
+import type { CategoryKind } from "@/lib/supabase/database.types";
 
 export type CategoryProgressData = {
   categoryId: string;
@@ -15,6 +16,9 @@ export type BudgetProgressResult = {
   rows: CategoryProgressData[];
   totalBudgeted: number;
   totalSpent: number;
+  // Sum of spend in 'saving' categories — money that's still the user's,
+  // so it's tracked separately rather than folded into totalSpent.
+  totalSaved: number;
   // Transactions in this period with no resolvable book — excluded from
   // the totals above so a specific book's numbers are never silently
   // missing spend. Always 0 when no book is selected (book_id === null),
@@ -38,13 +42,13 @@ export async function getBudgetProgress(
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { rows: [], totalBudgeted: 0, totalSpent: 0, unassignedCount: 0 };
+  if (!user) return { rows: [], totalBudgeted: 0, totalSpent: 0, totalSaved: 0, unassignedCount: 0 };
 
   const monthKey = financialMonthBudgetKey(from);
 
   let txQuery = supabase
     .from("transactions")
-    .select("category_id, amount, recipient, book_id")
+    .select("category_id, amount, recipient, counterparty_iban, book_id")
     .eq("user_id", user.id)
     .gte("occurred_at", from)
     .lte("occurred_at", `${to}T23:59:59`);
@@ -57,15 +61,17 @@ export async function getBudgetProgress(
     .eq("month", monthKey);
   budgetQuery = bookId ? budgetQuery.eq("book_id", bookId) : budgetQuery.is("book_id", null);
 
-  const [{ data: txs }, { data: budgetRows }, { data: known }] = await Promise.all([
+  const [{ data: txs }, { data: budgetRows }, { data: known }, { data: categories }] = await Promise.all([
     txQuery,
     budgetQuery,
-    supabase.from("known_recipients").select("recipient, is_own_account").eq("user_id", user.id),
+    supabase.from("known_recipients").select("recipient, counterparty_iban, is_own_account").eq("user_id", user.id),
+    supabase.from("categories").select("id, kind").eq("user_id", user.id),
   ]);
 
   const ownAccountSet = buildOwnAccountSet(
-    (known ?? []).map((r) => ({ recipient: r.recipient, isOwnAccount: r.is_own_account })),
+    (known ?? []).map((r) => ({ recipient: r.recipient, counterpartyIban: r.counterparty_iban, isOwnAccount: r.is_own_account })),
   );
+  const kindByCategory = new Map((categories ?? []).map((c) => [c.id, c.kind as CategoryKind]));
 
   const spentByCategory = new Map<string, number>();
   let unassignedCount = 0;
@@ -73,7 +79,7 @@ export async function getBudgetProgress(
     if (bookId && !tx.book_id) unassignedCount++;
     if (!tx.category_id) continue;
     if (tx.amount >= 0) continue;
-    if (isTransferRecipient(tx.recipient, ownAccountSet)) continue;
+    if (isTransferRecipient({ recipient: tx.recipient, counterpartyIban: tx.counterparty_iban }, ownAccountSet)) continue;
     spentByCategory.set(tx.category_id, (spentByCategory.get(tx.category_id) ?? 0) + Math.abs(tx.amount));
   }
 
@@ -89,10 +95,19 @@ export async function getBudgetProgress(
     budgeted: budgetByCategory.get(categoryId) ?? null,
   }));
 
-  const totalBudgeted = rows.reduce((sum, r) => sum + (r.budgeted ?? 0), 0);
-  const totalSpent = rows.reduce((sum, r) => sum + r.spent, 0);
+  let totalBudgeted = 0;
+  let totalSpent = 0;
+  let totalSaved = 0;
+  for (const row of rows) {
+    if (kindByCategory.get(row.categoryId) === "saving") {
+      totalSaved += row.spent;
+    } else {
+      totalBudgeted += row.budgeted ?? 0;
+      totalSpent += row.spent;
+    }
+  }
 
-  return { rows, totalBudgeted, totalSpent, unassignedCount };
+  return { rows, totalBudgeted, totalSpent, totalSaved, unassignedCount };
 }
 
 export type CategorySuggestion = {
@@ -133,7 +148,7 @@ export async function getBudgetSuggestions(
 
   let txQuery = supabase
     .from("transactions")
-    .select("category_id, amount, occurred_at, recipient")
+    .select("category_id, amount, occurred_at, recipient, counterparty_iban")
     .eq("user_id", user.id)
     .gte("occurred_at", earliestFrom)
     .lte("occurred_at", `${latestTo}T23:59:59`);
@@ -141,11 +156,11 @@ export async function getBudgetSuggestions(
 
   const [{ data: txs }, { data: known }] = await Promise.all([
     txQuery,
-    supabase.from("known_recipients").select("recipient, is_own_account").eq("user_id", user.id),
+    supabase.from("known_recipients").select("recipient, counterparty_iban, is_own_account").eq("user_id", user.id),
   ]);
 
   const ownAccountSet = buildOwnAccountSet(
-    (known ?? []).map((r) => ({ recipient: r.recipient, isOwnAccount: r.is_own_account })),
+    (known ?? []).map((r) => ({ recipient: r.recipient, counterpartyIban: r.counterparty_iban, isOwnAccount: r.is_own_account })),
   );
 
   const monthHasData = priorMonths.map(() => false);
@@ -158,7 +173,7 @@ export async function getBudgetSuggestions(
     monthHasData[monthIndex] = true;
 
     if (!tx.category_id || tx.amount >= 0) continue;
-    if (isTransferRecipient(tx.recipient, ownAccountSet)) continue;
+    if (isTransferRecipient({ recipient: tx.recipient, counterpartyIban: tx.counterparty_iban }, ownAccountSet)) continue;
 
     const amounts = perCategory.get(tx.category_id) ?? [0, 0, 0];
     amounts[monthIndex] += Math.abs(tx.amount);
