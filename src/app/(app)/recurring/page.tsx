@@ -7,7 +7,7 @@ export default async function RecurringPage() {
 
   const [items, { data: categories }, { data: accounts }] = await Promise.all([
     getRecurringItems(),
-    supabase.from("categories").select("id, name, color, icon, kind").order("created_at", { ascending: true }),
+    supabase.from("categories").select("id, name, color, icon, kind").order("sort_order", { ascending: true }),
     supabase.from("accounts").select("id, name").order("created_at", { ascending: true }),
   ]);
 

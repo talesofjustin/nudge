@@ -43,13 +43,14 @@ function SecondaryFilterChip({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition-colors ${
+          title={label}
+          className={`inline-flex h-7 max-w-48 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition-colors ${
             active
               ? "border-violet-400 bg-violet-50 text-violet-600"
               : "border-border text-muted hover:border-muted-2 hover:text-foreground"
           }`}
         >
-          {label}
+          <span className="truncate">{label}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-52" align="start">

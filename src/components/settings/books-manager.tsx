@@ -6,7 +6,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { createBook, renameBook, deleteBook, type BookData } from "@/app/(app)/settings/actions";
+import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
+import { AddBookDialog } from "@/components/settings/add-book-dialog";
+import { renameBook, deleteBook, type BookData } from "@/app/(app)/settings/actions";
 
 function RenamePopover({ name, onSave }: { name: string; onSave: (name: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -44,23 +46,10 @@ function RenamePopover({ name, onSave }: { name: string; onSave: (name: string) 
 
 export function BooksManager({ books }: { books: BookData[] }) {
   const router = useRouter();
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   function refresh() {
     router.refresh();
-  }
-
-  async function handleCreate() {
-    if (!newName.trim()) return;
-    setSubmitting(true);
-    await createBook(newName.trim());
-    setSubmitting(false);
-    setNewName("");
-    setCreating(false);
-    refresh();
   }
 
   return (
@@ -74,44 +63,15 @@ export function BooksManager({ books }: { books: BookData[] }) {
             people only need one.
           </p>
         </div>
-        {!creating && (
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setCreating(true)}
-            className="h-9 shrink-0 px-4 text-[13.5px]"
-          >
-            New book
-          </Button>
-        )}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setDialogOpen(true)}
+          className="h-9 shrink-0 px-4 text-[13.5px]"
+        >
+          New book
+        </Button>
       </div>
-
-      {creating && (
-        <div className="flex items-end gap-2">
-          <Input
-            label="Name"
-            placeholder="e.g. Freelance"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            autoFocus
-            className="max-w-xs"
-          />
-          <Button type="button" onClick={handleCreate} disabled={submitting} className="h-9 px-4 text-[13px]">
-            {submitting ? "Adding…" : "Add"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setCreating(false);
-              setNewName("");
-            }}
-            className="h-9 px-3 text-[13px]"
-          >
-            Cancel
-          </Button>
-        </div>
-      )}
 
       {books.length === 0 ? (
         <p className="text-[13px] text-muted-2">No books yet.</p>
@@ -132,40 +92,19 @@ export function BooksManager({ books }: { books: BookData[] }) {
                 </span>
               </div>
 
-              {confirmingDeleteId === b.id ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-muted">Delete — accounts become unassigned?</span>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDeleteId(null)}
-                    className="text-[12.5px] font-medium text-muted hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await deleteBook(b.id);
-                      refresh();
-                    }}
-                    className="text-[12.5px] font-medium text-danger hover:underline"
-                  >
-                    Confirm
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDeleteId(b.id)}
-                  className="text-[12.5px] font-medium text-muted-2 hover:text-danger"
-                >
-                  Delete
-                </button>
-              )}
+              <ConfirmDeleteButton
+                confirmMessage="Accounts become unassigned — delete?"
+                onConfirm={async () => {
+                  await deleteBook(b.id);
+                  refresh();
+                }}
+              />
             </div>
           ))}
         </div>
       )}
+
+      <AddBookDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onCreated={refresh} />
     </Card>
   );
 }

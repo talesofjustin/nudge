@@ -14,6 +14,7 @@ import { resolveTransferFlag, setRecipientBookRule, setRecipientCategoryRule } f
 import { identityKey } from "@/lib/counterparty-identity";
 import type { BookInfo } from "@/components/transactions/book-picker";
 import type { ImportFlag } from "@/lib/import-checks";
+import type { ColumnMapping } from "@/lib/csv";
 
 type ItemState = { id: string; label: string; data?: Record<string, string>; resolved: boolean };
 type FlagState = Omit<ImportFlag, "items"> & { resolved: boolean; items?: ItemState[] };
@@ -29,16 +30,55 @@ function isFlagBlocking(flag: FlagState): boolean {
   return flag.blocking !== false;
 }
 
+const MAPPING_SUMMARY_FIELDS: { key: keyof ColumnMapping; label: string }[] = [
+  { key: "date", label: "Date" },
+  { key: "amount", label: "Amount" },
+  { key: "recipient", label: "Recipient" },
+  { key: "description", label: "Note" },
+  { key: "counterpartyIban", label: "Counterparty account" },
+];
+
+// Lets the user verify what's about to be imported right before
+// committing, without leaving this step — only the fields actually
+// mapped show up.
+function MappingSummary({ mapping, onEdit }: { mapping: ColumnMapping | null; onEdit: () => void }) {
+  const parts = MAPPING_SUMMARY_FIELDS.filter((f) => mapping?.[f.key]).map(
+    (f) => `${f.label} ← ${mapping![f.key]}`,
+  );
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl bg-canvas px-3 py-2 text-[12.5px] text-muted">
+      {parts.length > 0 ? (
+        parts.map((part, i) => (
+          <span key={part}>
+            {part}
+            {i < parts.length - 1 && <span className="ml-1.5 text-muted-2">·</span>}
+          </span>
+        ))
+      ) : (
+        <span>Using this account&apos;s saved column mapping.</span>
+      )}
+      <button type="button" onClick={onEdit} className="ml-auto font-medium text-violet-600 hover:underline">
+        Edit mapping
+      </button>
+    </div>
+  );
+}
+
 export function ReviewStep({
   rows,
   accountId,
   books,
+  mapping,
+  onEditMapping,
   onBack,
   onConfirm,
 }: {
   rows: ImportRow[];
   accountId: string;
   books: BookInfo[];
+  mapping: ColumnMapping | null;
+  onEditMapping: () => void;
   onBack: () => void;
   onConfirm: (selectedRows: ImportRow[], bookOverrides: Record<string, string>) => void;
 }) {
@@ -161,6 +201,8 @@ export function ReviewStep({
         </p>
       </div>
 
+      <MappingSummary mapping={mapping} onEdit={onEditMapping} />
+
       {flags.length > 0 && (
         <div className="flex flex-col gap-3">
           {flags.map((flag) => {
@@ -275,13 +317,31 @@ export function ReviewStep({
           </button>
         </div>
         <div className="max-h-80 overflow-y-auto themed-scrollbar">
-          <table className="w-full text-left text-[12.5px]">
+          <table className="w-full table-fixed text-left text-[12.5px]">
+            <colgroup>
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "36%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "22%" }} />
+            </colgroup>
+            <thead>
+              <tr className="sticky top-0 z-10 border-b border-border bg-canvas">
+                <th className="px-3 py-2" />
+                <th className="px-2 py-2 text-[11px] font-medium tracking-wide text-muted uppercase">Date</th>
+                <th className="px-2 py-2 text-[11px] font-medium tracking-wide text-muted uppercase">Recipient</th>
+                <th className="px-2 py-2 text-right text-[11px] font-medium tracking-wide text-muted uppercase">
+                  Amount
+                </th>
+                <th className="px-2 py-2 text-[11px] font-medium tracking-wide text-muted uppercase">Category</th>
+              </tr>
+            </thead>
             <tbody>
               {visibleRows.map((row) => {
                 const actualIndex = rowStates.indexOf(row);
                 return (
                   <tr key={actualIndex} className={`border-b border-border last:border-0 ${row.isDuplicate ? "opacity-50" : ""}`}>
-                    <td className="w-8 px-3 py-1.5">
+                    <td className="px-3 py-1.5">
                       <input
                         type="checkbox"
                         checked={row.selected}
@@ -290,7 +350,7 @@ export function ReviewStep({
                       />
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-muted">{row.date.slice(0, 10)}</td>
-                    <td className="max-w-[180px] truncate px-2 py-1.5 text-foreground">{row.recipient || "—"}</td>
+                    <td className="truncate px-2 py-1.5 text-foreground">{row.recipient || "—"}</td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-foreground">
                       {row.amount > 0 ? "+" : "-"}€{Math.abs(row.amount).toFixed(2)}
                     </td>

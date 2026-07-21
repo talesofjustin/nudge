@@ -1,8 +1,12 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+
 // Shared "always do X for this recipient?" prompt — used identically for
-// book rules and category rules (same mechanism, two columns). Purely
-// presentational: the caller owns what "confirm" actually does.
+// book rules and category rules (same mechanism, two columns). Rendered
+// inside a Popover anchored to the picker it followed (see transaction-
+// row.tsx), so it floats above the table instead of growing the row or
+// pushing anything below it out of place.
 export function RecipientRuleOffer({
   message,
   onConfirm,
@@ -13,14 +17,16 @@ export function RecipientRuleOffer({
   onDismiss: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 whitespace-nowrap rounded-lg bg-violet-50 px-2 py-1 text-[12px] text-violet-600">
-      <span>{message}</span>
-      <button type="button" onClick={onConfirm} className="font-semibold hover:underline">
-        Yes
-      </button>
-      <button type="button" onClick={onDismiss} className="text-muted hover:text-foreground">
-        No
-      </button>
+    <div className="flex w-64 flex-col gap-3">
+      <p className="text-[13px] text-foreground">{message}</p>
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="ghost" type="button" className="h-8 px-3 text-[12.5px]" onClick={onDismiss}>
+          No thanks
+        </Button>
+        <Button type="button" className="h-8 px-3 text-[12.5px]" onClick={onConfirm}>
+          Yes, always
+        </Button>
+      </div>
     </div>
   );
 }

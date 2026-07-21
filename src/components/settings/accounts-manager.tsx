@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { BookPicker, type BookInfo } from "@/components/transactions/book-picker";
 import { AddAccountDialog } from "@/components/settings/add-account-dialog";
 import {
@@ -19,7 +20,6 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   bank: "Bank",
   paypal: "PayPal",
   credit_card: "Credit card",
-  cash: "Cash",
   other: "Other",
 };
 
@@ -73,7 +73,6 @@ function AccountRow({
   showBookFeature: boolean;
   onChanged: () => void;
 }) {
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetDone, setResetDone] = useState(false);
 
@@ -121,36 +120,12 @@ function AccountRow({
           </button>
         )}
 
-        {confirmingDelete ? (
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-muted">Delete?</span>
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(false)}
-              className="text-[12.5px] font-medium text-muted hover:text-foreground"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                await deleteAccount(account.id);
-                onChanged();
-              }}
-              className="text-[12.5px] font-medium text-danger hover:underline"
-            >
-              Confirm
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmingDelete(true)}
-            className="text-[12.5px] font-medium text-muted-2 hover:text-danger"
-          >
-            Delete
-          </button>
-        )}
+        <ConfirmDeleteButton
+          onConfirm={async () => {
+            await deleteAccount(account.id);
+            onChanged();
+          }}
+        />
       </div>
     </div>
   );

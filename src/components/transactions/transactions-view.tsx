@@ -13,6 +13,7 @@ import {
   getFilteredTransactions,
   updateTransaction,
   createCategory,
+  updateCategory,
   deleteTransactions,
   markTransactionsReviewed,
   getRecipientBookRules,
@@ -208,6 +209,14 @@ export function TransactionsView({
     return created;
   }
 
+  async function handleUpdateCategory(
+    id: string,
+    updates: { name: string; color: string; icon: string; kind: CategoryKind },
+  ) {
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+    await updateCategory(id, updates);
+  }
+
   async function handleOfferBookRule(recipient: string, bookId: string) {
     const row = rows.find((r) => r.recipient === recipient);
     const key = identityKey({ recipient, counterpartyIban: row?.counterpartyIban });
@@ -398,6 +407,7 @@ export function TransactionsView({
                         onDelete={handleDeleteRow}
                         onFilterByRecipient={handleFilterByRecipient}
                         onCreateCategory={handleCreateCategory}
+                        onUpdateCategory={handleUpdateCategory}
                         onOfferBookRule={handleOfferBookRule}
                         onOfferCategoryRule={handleOfferCategoryRule}
                       />

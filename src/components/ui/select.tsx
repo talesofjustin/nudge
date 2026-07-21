@@ -69,9 +69,11 @@ export function SelectItem({
   return (
     <SelectPrimitive.Item
       value={value}
-      className="relative flex h-8 cursor-pointer select-none items-center rounded-lg px-2.5 pr-7 text-[13px] text-foreground outline-none data-[highlighted]:bg-canvas data-[highlighted]:outline-none"
+      className="relative flex h-8 max-w-full cursor-pointer select-none items-center overflow-hidden rounded-lg px-2.5 pr-7 text-[13px] text-foreground outline-none data-[highlighted]:bg-canvas data-[highlighted]:outline-none"
     >
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      <SelectPrimitive.ItemText>
+        <span className="block truncate">{children}</span>
+      </SelectPrimitive.ItemText>
       <SelectPrimitive.ItemIndicator className="absolute right-2.5 flex items-center">
         <CheckIcon className="h-3.5 w-3.5 text-violet-600" />
       </SelectPrimitive.ItemIndicator>

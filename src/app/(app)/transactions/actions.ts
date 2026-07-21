@@ -302,9 +302,16 @@ export async function createCategory(
 
   if (!user) return null;
 
+  // New categories append after the current last one rather than defaulting
+  // to sort_order 0, which would jump them to the front of the list.
+  const { count } = await supabase
+    .from("categories")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+
   const { data, error } = await supabase
     .from("categories")
-    .insert({ user_id: user.id, name, color, icon, kind })
+    .insert({ user_id: user.id, name, color, icon, kind, sort_order: count ?? 0 })
     .select("id, name, color, icon, kind")
     .single();
 
@@ -335,6 +342,24 @@ export async function deleteCategory(id: string): Promise<{ success: boolean }> 
 
   const { error } = await supabase.from("categories").delete().eq("id", id).eq("user_id", user.id);
   return { success: !error };
+}
+
+// `orderedIds` is the full list in its new order — sort_order is just the
+// index, so dragging one category re-sends everyone's position.
+export async function reorderCategories(orderedIds: string[]): Promise<{ success: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false };
+
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase.from("categories").update({ sort_order: index }).eq("id", id).eq("user_id", user.id),
+    ),
+  );
+
+  return { success: results.every((r) => !r.error) };
 }
 
 // ---------------------------------------------------------------------------

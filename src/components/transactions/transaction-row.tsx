@@ -1,6 +1,8 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { CategoryPicker } from "@/components/transactions/category-picker";
 import { BookPicker, type BookInfo } from "@/components/transactions/book-picker";
 import { RecipientRuleOffer } from "@/components/transactions/recipient-rule-offer";
@@ -10,8 +12,14 @@ import { ChevronRightIcon, TransferIcon, TrashIcon } from "@/components/icons/da
 import { parseRawDescription } from "@/lib/parse-raw-description";
 import type { TransactionRowData } from "@/app/(app)/transactions/actions";
 
-export const COLUMN_COUNT_WITH_BOOK = 10;
-export const COLUMN_COUNT_WITHOUT_BOOK = 9;
+// Must match the actual number of <th>/<td> cells rendered per row in
+// transactions-view.tsx's getColumns() (checkbox + Date + Recipient + Note
+// + Amount + Category + [Book] + Account + Recurring). A mismatch here
+// makes the expanded detail row's colSpan claim more or fewer columns than
+// the table-fixed colgroup actually defines, which visibly reflows/jumps
+// the whole table instead of expanding cleanly in place.
+export const COLUMN_COUNT_WITH_BOOK = 9;
+export const COLUMN_COUNT_WITHOUT_BOOK = 8;
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -73,6 +81,7 @@ export function TransactionRow({
   onDelete,
   onFilterByRecipient,
   onCreateCategory,
+  onUpdateCategory,
   onOfferBookRule,
   onOfferCategoryRule,
 }: {
@@ -104,6 +113,10 @@ export function TransactionRow({
     icon: string,
     kind: "spending" | "saving",
   ) => Promise<CategoryInfo | null>;
+  onUpdateCategory: (
+    id: string,
+    updates: { name: string; color: string; icon: string; kind: "spending" | "saving" },
+  ) => Promise<void>;
   onOfferBookRule: (recipient: string, bookId: string) => void;
   onOfferCategoryRule: (recipient: string, categoryId: string) => void;
 }) {
@@ -111,7 +124,14 @@ export function TransactionRow({
   const [draft, setDraft] = useState(row.description ?? "");
   const [expanded, setExpanded] = useState(false);
   const [pendingOffer, setPendingOffer] = useState<PendingOffer | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // The picker this follows (BookPicker/CategoryPicker) closes its own
+  // popover in the same click that triggers this. Setting pendingOffer
+  // (which opens a second popover anchored to the same trigger) in that
+  // same tick loses a race against Radix's dismissable-layer handling for
+  // the one that's closing, and the new popover closes before it ever
+  // paints. A short delay lets that settle first.
+  const OFFER_POPOVER_DELAY_MS = 80;
 
   function commitDescription() {
     setEditingDescription(false);
@@ -124,7 +144,12 @@ export function TransactionRow({
     onUpdate(row.id, { bookId });
     if (bookId && row.recipient && bookRuleTargetId === null) {
       const book = books.find((b) => b.id === bookId);
-      if (book) setPendingOffer({ kind: "book-create", targetId: bookId, label: book.name });
+      if (book) {
+        setTimeout(
+          () => setPendingOffer({ kind: "book-create", targetId: bookId, label: book.name }),
+          OFFER_POPOVER_DELAY_MS,
+        );
+      }
     } else {
       setPendingOffer(null);
     }
@@ -148,15 +173,22 @@ export function TransactionRow({
       if (!category) {
         setPendingOffer(null);
       } else if (categoryRuleTargetId === null) {
-        setPendingOffer({ kind: "category-create", targetId: categoryId, label: category.name });
+        setTimeout(
+          () => setPendingOffer({ kind: "category-create", targetId: categoryId, label: category.name }),
+          OFFER_POPOVER_DELAY_MS,
+        );
       } else if (categoryRuleTargetId !== categoryId) {
         const oldCategory = categories.find((c) => c.id === categoryRuleTargetId);
-        setPendingOffer({
-          kind: "category-update",
-          targetId: categoryId,
-          oldLabel: oldCategory?.name ?? "its old category",
-          newLabel: category.name,
-        });
+        setTimeout(
+          () =>
+            setPendingOffer({
+              kind: "category-update",
+              targetId: categoryId,
+              oldLabel: oldCategory?.name ?? "its old category",
+              newLabel: category.name,
+            }),
+          OFFER_POPOVER_DELAY_MS,
+        );
       } else {
         setPendingOffer(null);
       }
@@ -173,8 +205,8 @@ export function TransactionRow({
   }
 
   function offerMessage(offer: PendingOffer): string {
-    if (offer.kind === "book-create") return `Always ${row.recipient} → ${offer.label}?`;
-    if (offer.kind === "category-create") return `Always ${row.recipient} → ${offer.label}?`;
+    if (offer.kind === "book-create") return `Always put ${row.recipient} in ${offer.label}?`;
+    if (offer.kind === "category-create") return `Always categorise ${row.recipient} as ${offer.label}?`;
     return `You changed ${row.recipient} from ${offer.oldLabel} to ${offer.newLabel} — update the rule?`;
   }
 
@@ -265,36 +297,62 @@ export function TransactionRow({
           </span>
         </td>
         <td className="truncate px-3 align-middle">
-          <div className="flex flex-col gap-0.5">
-            <CategoryPicker
-              categories={categories}
-              value={row.categoryId}
-              onChange={handleCategoryChange}
-              onCreateCategory={onCreateCategory}
-              emptyLabel={row.isTransfer ? "—" : undefined}
-              unreviewed={isUnreviewedAuto}
-            />
+          {/* Anchored, not inline flow: the offer floats over the table
+              instead of growing this cell (which would resize just this
+              row's height relative to its neighbors and read as a jump). */}
+          <Popover
+            open={!!pendingOffer?.kind.startsWith("category")}
+            onOpenChange={(next) => {
+              if (!next) setPendingOffer(null);
+            }}
+          >
+            <PopoverAnchor asChild>
+              <div>
+                <CategoryPicker
+                  categories={categories}
+                  value={row.categoryId}
+                  onChange={handleCategoryChange}
+                  onCreateCategory={onCreateCategory}
+                  onUpdateCategory={onUpdateCategory}
+                  emptyLabel={row.isTransfer ? "—" : undefined}
+                  unreviewed={isUnreviewedAuto}
+                />
+              </div>
+            </PopoverAnchor>
             {pendingOffer?.kind.startsWith("category") && (
-              <RecipientRuleOffer
-                message={offerMessage(pendingOffer)}
-                onConfirm={confirmOffer}
-                onDismiss={() => setPendingOffer(null)}
-              />
-            )}
-          </div>
-        </td>
-        {showBookColumn && (
-          <td className="truncate px-3 align-middle">
-            <div className="flex flex-col gap-0.5">
-              <BookPicker books={books} value={row.bookId} onChange={handleBookChange} />
-              {pendingOffer?.kind === "book-create" && (
+              <PopoverContent align="start">
                 <RecipientRuleOffer
                   message={offerMessage(pendingOffer)}
                   onConfirm={confirmOffer}
                   onDismiss={() => setPendingOffer(null)}
                 />
+              </PopoverContent>
+            )}
+          </Popover>
+        </td>
+        {showBookColumn && (
+          <td className="truncate px-3 align-middle">
+            <Popover
+              open={pendingOffer?.kind === "book-create"}
+              onOpenChange={(next) => {
+                if (!next) setPendingOffer(null);
+              }}
+            >
+              <PopoverAnchor asChild>
+                <div>
+                  <BookPicker books={books} value={row.bookId} onChange={handleBookChange} />
+                </div>
+              </PopoverAnchor>
+              {pendingOffer?.kind === "book-create" && (
+                <PopoverContent align="start">
+                  <RecipientRuleOffer
+                    message={offerMessage(pendingOffer)}
+                    onConfirm={confirmOffer}
+                    onDismiss={() => setPendingOffer(null)}
+                  />
+                </PopoverContent>
               )}
-            </div>
+            </Popover>
           </td>
         )}
         <td className="truncate px-3 align-middle text-[13px] text-muted">{accountName}</td>
@@ -336,34 +394,13 @@ export function TransactionRow({
               )}
 
               <div className="flex items-center gap-2 border-t border-border pt-2">
-                {confirmingDelete ? (
-                  <>
-                    <span className="text-[12px] text-muted">Delete this transaction permanently?</span>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmingDelete(false)}
-                      className="text-[12px] font-medium text-muted hover:text-foreground"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(row.id)}
-                      className="text-[12px] font-medium text-danger hover:underline"
-                    >
-                      Confirm
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDelete(true)}
-                    className="flex items-center gap-1.5 text-[12px] font-medium text-muted-2 hover:text-danger"
-                  >
-                    <TrashIcon className="h-3.5 w-3.5" />
-                    Delete transaction
-                  </button>
-                )}
+                <ConfirmDeleteButton
+                  icon={<TrashIcon className="h-3.5 w-3.5" />}
+                  showLabelWithIcon
+                  label="Delete transaction"
+                  confirmMessage="Delete this transaction permanently?"
+                  onConfirm={() => onDelete(row.id)}
+                />
               </div>
             </div>
           </td>

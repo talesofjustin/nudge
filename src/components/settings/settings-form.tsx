@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { FilterChip } from "@/components/ui/pill";
@@ -21,6 +22,7 @@ function detectTimezone(): string {
 }
 
 export function SettingsForm({ settings }: { settings: UserSettings }) {
+  const router = useRouter();
   const [decimalSeparator, setDecimalSeparator] = useState<DecimalSeparator>(
     () => settings.decimalSeparator ?? detectDecimalSeparator(),
   );
@@ -55,6 +57,10 @@ export function SettingsForm({ settings }: { settings: UserSettings }) {
       return;
     }
     setSaved(true);
+    // Without this, a later revisit to this page (via soft nav) can serve
+    // the router cache's stale props instead of the value just saved —
+    // this is what caused the payday anchor to appear unset after a save.
+    router.refresh();
   }
 
   return (

@@ -13,7 +13,6 @@ const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "bank", label: "Bank" },
   { value: "paypal", label: "PayPal" },
   { value: "credit_card", label: "Credit card" },
-  { value: "cash", label: "Cash" },
   { value: "other", label: "Other" },
 ];
 

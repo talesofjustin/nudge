@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { CategoryBadge, TransferBadge, type CategoryInfo } from "@/components/transactions/category-badge";
 import type { BookInfo } from "@/components/transactions/book-picker";
 import {
@@ -91,15 +92,10 @@ function RuleRow({
   onDeleted: () => void;
   onTargetChanged: (targetId: string) => void;
 }) {
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
   async function handleDelete() {
-    setDeleting(true);
     if (rule.kind === "transfer") await unflagKnownRecipient(rule.recipient, rule.counterpartyIban);
     else if (rule.kind === "book") await deleteRecipientBookRule(rule.recipient, rule.counterpartyIban);
     else await deleteRecipientCategoryRule(rule.recipient, rule.counterpartyIban);
-    setDeleting(false);
     onDeleted();
   }
 
@@ -135,34 +131,7 @@ function RuleRow({
           />
         )}
 
-        {confirmingDelete ? (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(false)}
-              className="text-[12px] font-medium text-muted hover:text-foreground"
-              disabled={deleting}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="text-[12px] font-medium text-danger hover:underline"
-              disabled={deleting}
-            >
-              {deleting ? "Removing…" : "Confirm"}
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmingDelete(true)}
-            className="text-[12px] font-medium text-muted-2 hover:text-danger"
-          >
-            Delete
-          </button>
-        )}
+        <ConfirmDeleteButton onConfirm={handleDelete} />
       </div>
     </div>
   );

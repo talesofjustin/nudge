@@ -57,6 +57,7 @@ export function ImportWizard({
 
   const [pendingRows, setPendingRows] = useState<ImportRow[]>([]);
   const [pendingSkippedCount, setPendingSkippedCount] = useState(0);
+  const [usedMapping, setUsedMapping] = useState<ColumnMapping | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -124,6 +125,7 @@ export function ImportWizard({
           );
           setPendingSkippedCount(mapped.length - validRows.length);
           setUsedSavedMapping(true);
+          setUsedMapping(savedMapping);
           setStep("review");
         } else {
           setMapping(guessColumnMapping(fields));
@@ -149,8 +151,15 @@ export function ImportWizard({
     setPendingRows(validRows);
     setPendingSkippedCount(skippedCount);
     setUsedSavedMapping(false);
+    setUsedMapping(mapping);
     setShowMappingUi(false);
     setStep("review");
+  }
+
+  function handleEditMapping() {
+    setMapping(usedMapping ?? mapping);
+    setShowMappingUi(true);
+    setStep("upload");
   }
 
   async function handleFinalConfirm(selectedRows: ImportRow[], bookOverrides: Record<string, string>) {
@@ -238,6 +247,8 @@ export function ImportWizard({
               rows={pendingRows}
               accountId={accountId!}
               books={books}
+              mapping={usedMapping}
+              onEditMapping={handleEditMapping}
               onBack={() => {
                 setStep("upload");
                 if (!usedSavedMapping) setShowMappingUi(true);

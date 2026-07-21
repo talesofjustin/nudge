@@ -38,7 +38,7 @@ export default async function BudgetPage({
     supabase
       .from("categories")
       .select("id, name, color, icon, kind")
-      .order("created_at", { ascending: true }),
+      .order("sort_order", { ascending: true }),
     getBudgetProgress(month.from, month.to, bookId),
   ]);
 

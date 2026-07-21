@@ -17,14 +17,16 @@
 // 20260720134156_add_counterparty_iban.sql,
 // 20260720134216_add_category_kind.sql,
 // 20260720134233_add_category_source_and_reviewed_at.sql,
-// 20260720134316_add_recurring_groups.sql, and
-// 20260720155442_add_recurring_group_status.sql. Shaped the way
+// 20260720134316_add_recurring_groups.sql,
+// 20260720155442_add_recurring_group_status.sql,
+// 20260721081720_remove_cash_account_type.sql, and
+// 20260721081721_add_category_sort_order.sql. Shaped the way
 // `supabase gen types typescript` would produce it, so running that command
 // later (once the migrations have been applied) is a drop-in replacement for
 // this file. `Relationships` is left empty here (no typed nested-select
 // embedding) — real codegen will populate it from the FKs.
 
-export type AccountType = "bank" | "paypal" | "credit_card" | "cash" | "other";
+export type AccountType = "bank" | "paypal" | "credit_card" | "other";
 export type DecimalSeparator = "period" | "comma";
 export type ThemePreference = "light" | "dark" | "system";
 export type CategoryKind = "spending" | "saving";
@@ -76,6 +78,7 @@ export type Database = {
           color: string;
           icon: string;
           kind: CategoryKind;
+          sort_order: number;
           created_at: string;
         };
         Insert: {
@@ -85,6 +88,7 @@ export type Database = {
           color: string;
           icon: string;
           kind?: CategoryKind;
+          sort_order?: number;
           created_at?: string;
         };
         Update: {
@@ -94,6 +98,7 @@ export type Database = {
           color?: string;
           icon?: string;
           kind?: CategoryKind;
+          sort_order?: number;
           created_at?: string;
         };
         Relationships: [];
