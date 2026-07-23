@@ -13,9 +13,22 @@ import type { CategoryKind } from "@/lib/supabase/database.types";
 
 type Mode = { view: "list" } | { view: "create" } | { view: "edit"; category: CategoryInfo };
 
+// "Remember for this recipient" defaults off but carries over within a
+// session, so someone doing a bulk categorising run doesn't have to
+// re-toggle it on every row — sessionStorage rather than a client prop
+// because pickers across many rows/rerenders shouldn't need lifted state
+// just to share this one preference.
+const REMEMBER_STORAGE_KEY = "nudge-remember-category-toggle";
+
+function getStoredRemember(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.sessionStorage.getItem(REMEMBER_STORAGE_KEY) === "1";
+}
+
 export function CategoryPicker({
   categories,
   value,
+  recipient,
   onChange,
   onCreateCategory,
   onUpdateCategory,
@@ -24,7 +37,8 @@ export function CategoryPicker({
 }: {
   categories: CategoryInfo[];
   value: string | null;
-  onChange: (categoryId: string | null) => void;
+  recipient: string | null;
+  onChange: (categoryId: string | null, remember: boolean) => void;
   onCreateCategory: (name: string, color: string, icon: string, kind: CategoryKind) => Promise<CategoryInfo | null>;
   onUpdateCategory?: (
     id: string,
@@ -35,6 +49,7 @@ export function CategoryPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>({ view: "list" });
+  const [remember, setRemember] = useState(false);
   const [name, setName] = useState("");
   const [color, setColor] = useState(CATEGORY_COLOR_SWATCHES[0]);
   const [icon, setIcon] = useState(Object.keys(CATEGORY_ICONS)[0]);
@@ -79,7 +94,7 @@ export function CategoryPicker({
       setError("Could not create category.");
       return;
     }
-    onChange(created.id);
+    onChange(created.id, remember);
     setOpen(false);
     setMode({ view: "list" });
   }
@@ -98,7 +113,9 @@ export function CategoryPicker({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) {
+        if (next) {
+          setRemember(getStoredRemember());
+        } else {
           setMode({ view: "list" });
           resetForm();
         }
@@ -115,7 +132,7 @@ export function CategoryPicker({
             <button
               type="button"
               onClick={() => {
-                onChange(null);
+                onChange(null, false);
                 setOpen(false);
               }}
               className="flex items-center rounded-xl px-2 py-2 text-left hover:bg-canvas"
@@ -132,7 +149,7 @@ export function CategoryPicker({
                   <button
                     type="button"
                     onClick={() => {
-                      onChange(c.id);
+                      onChange(c.id, remember);
                       setOpen(false);
                     }}
                     className="min-w-0 flex-1 px-1.5 py-2 text-left"
@@ -152,6 +169,21 @@ export function CategoryPicker({
                 </div>
               ))}
             </div>
+
+            {recipient && (
+              <label className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-[12.5px] text-muted">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => {
+                    setRemember(e.target.checked);
+                    window.sessionStorage.setItem(REMEMBER_STORAGE_KEY, e.target.checked ? "1" : "0");
+                  }}
+                  className="h-3.5 w-3.5 rounded border-border accent-[var(--violet-600)]"
+                />
+                Remember for {recipient}
+              </label>
+            )}
 
             <div className="mt-1 border-t border-border pt-2">
               <button

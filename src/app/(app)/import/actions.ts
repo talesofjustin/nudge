@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { AccountType, SavedColumnMapping } from "@/lib/supabase/database.types";
 import { IMPORT_CHECKS, type ImportFlag } from "@/lib/import-checks";
-import { identityKey } from "@/lib/counterparty-identity";
+import { identityKey, transactionMatchKey } from "@/lib/counterparty-identity";
 import { buildRecipientBookRuleMap, buildRecipientCategoryRuleMap, resolveBookId } from "@/lib/book-resolution";
 import { recomputeRecurringGroups } from "@/lib/recurring";
 
@@ -64,25 +64,20 @@ export async function saveColumnMapping(
   return { success: !error };
 }
 
-// Time-aware key when the row has a real parsed time (dropping
-// description entirely — it's the least reliable field); falls back to
-// date + amount + counterparty + description otherwise, matching the old
-// behavior for statements that don't carry a parseable time. The
-// counterparty component prefers IBAN over recipient name, same as rules
-// and transfer detection.
 function rowKey(row: {
   date: string;
   amount: number;
   recipient: string | null;
   counterpartyIban?: string | null;
-  description: string | null;
   hasPreciseTime: boolean;
 }): string {
-  const counterparty = identityKey({ recipient: row.recipient, counterpartyIban: row.counterpartyIban }) ?? "";
-  if (row.hasPreciseTime) {
-    return `${row.date}|${row.amount}|${counterparty}`;
-  }
-  return `${row.date.slice(0, 10)}|${row.amount}|${counterparty}|${(row.description ?? "").trim().toLowerCase()}`;
+  return transactionMatchKey({
+    occurredAt: row.date,
+    hasPreciseTime: row.hasPreciseTime,
+    amount: row.amount,
+    recipient: row.recipient,
+    counterpartyIban: row.counterpartyIban,
+  });
 }
 
 export type RowPreview = {
@@ -110,7 +105,7 @@ export async function previewImportRows(
   const [{ data: existing }, { data: rules }, { data: categories }] = await Promise.all([
     supabase
       .from("transactions")
-      .select("occurred_at, amount, recipient, counterparty_iban, description, has_precise_time")
+      .select("occurred_at, amount, recipient, counterparty_iban, has_precise_time")
       .eq("account_id", accountId)
       .eq("user_id", user.id)
       .gte("occurred_at", dates[0])
@@ -126,7 +121,6 @@ export async function previewImportRows(
         amount: t.amount,
         recipient: t.recipient,
         counterpartyIban: t.counterparty_iban,
-        description: t.description,
         hasPreciseTime: t.has_precise_time,
       }),
     ),

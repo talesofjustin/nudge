@@ -1,12 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { identityKey } from "@/lib/counterparty-identity";
+import type { RecurringGroupStatus } from "@/lib/supabase/database.types";
 
 // A recurring pattern is about rhythm, not amount — a salary with holiday
-// pay must not look "broken". Grouping matches on counterparty identity
-// (IBAN first, recipient name otherwise) plus a regular interval; the
-// typical amount is the median of non-outlier occurrences, recomputed
-// from scratch each time rather than incrementally maintained, since
-// deletions/edits would otherwise leave it stale.
+// pay must not look "broken". But the unit of recurrence is counterparty
+// AND amount, not counterparty alone: a sender like a tax office can bill
+// several genuinely different recurring amounts (motor tax, car tax), and
+// those are separate recurring items, not one item with the others as
+// "outliers". Occurrences for a counterparty are first clustered by
+// amount (within AMOUNT_CLUSTER_TOLERANCE of each other); each cluster is
+// then checked for a regular interval independently. "Outlier" only
+// applies WITHIN an established cluster (e.g. a €1250 rent that was €1400
+// once) — a different amount entirely just forms its own cluster/group.
 //
 // Detection is always a suggestion (recurring_groups.status starts
 // 'detected') — a transaction's is_recurring flag only ever flips true
@@ -19,7 +24,8 @@ const MIN_INTERVAL_DAYS = 5;
 const MAX_INTERVAL_DAYS = 400;
 const INTERVAL_TOLERANCE = 0.3; // gaps within ±30% of the median count as "regular"
 const MIN_REGULAR_FRACTION = 0.7; // at least 70% of gaps must fall in that band
-export const OUTLIER_THRESHOLD = 0.25; // >25% off the typical amount = outlier
+export const OUTLIER_THRESHOLD = 0.25; // >25% off a cluster's typical amount = outlier within that cluster
+const AMOUNT_CLUSTER_TOLERANCE = 0.1; // amounts within ~10% of each other form the same recurring item
 const DEFAULT_INTERVAL_DAYS = 30; // fallback when a manual flag has too little history to infer a cadence
 
 function median(values: number[]): number {
@@ -33,6 +39,40 @@ function daysBetween(a: string, b: string): number {
 }
 
 type Occurrence = { id: string; occurredAt: string; amount: number; recipient: string | null };
+
+// Sequential clustering over amounts sorted ascending: an occurrence joins
+// the current cluster if it's within tolerance of that cluster's running
+// average, otherwise it starts a new one. Well-separated amounts (the
+// whole point) produce well-separated clusters this way.
+function clusterByAmount(occurrences: Occurrence[]): Occurrence[][] {
+  const sorted = [...occurrences].sort((a, b) => a.amount - b.amount);
+  const clusters: Occurrence[][] = [];
+  let current: Occurrence[] = [];
+  let currentSum = 0;
+
+  for (const occ of sorted) {
+    if (current.length === 0) {
+      current = [occ];
+      currentSum = occ.amount;
+      continue;
+    }
+    const currentAvg = currentSum / current.length;
+    const withinTolerance =
+      currentAvg === 0
+        ? occ.amount === 0
+        : Math.abs(occ.amount - currentAvg) / Math.abs(currentAvg) <= AMOUNT_CLUSTER_TOLERANCE;
+    if (withinTolerance) {
+      current.push(occ);
+      currentSum += occ.amount;
+    } else {
+      clusters.push(current);
+      current = [occ];
+      currentSum = occ.amount;
+    }
+  }
+  if (current.length > 0) clusters.push(current);
+  return clusters;
+}
 
 function detectInterval(occurrences: Occurrence[]): number | null {
   if (occurrences.length < MIN_OCCURRENCES) return null;
@@ -94,22 +134,33 @@ function mostCommonLabel(occurrences: Occurrence[]): string {
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
+type ExistingGroup = { id: string; identity_key: string; typical_amount: number; status: RecurringGroupStatus };
 
-async function findOrCreateGroup(
+// Finds an existing group for this counterparty whose typical amount is
+// still close to the new cluster's, so a confirmed/dismissed decision
+// stays attached across reruns even as new data nudges the median
+// slightly — matching by amount proximity rather than a positional index,
+// which would churn if cluster boundaries shifted. Creates a new group
+// (with a fresh, cluster-specific identity_key) when nothing matches.
+async function upsertClusterGroup(
   supabase: Supabase,
   userId: string,
-  key: string,
+  counterpartyKey: string,
+  candidates: ExistingGroup[],
+  usedGroupIds: Set<string>,
   fields: { label: string; intervalDays: number; typicalAmount: number },
   createStatus: "detected" | "confirmed",
-): Promise<{ id: string; status: "detected" | "confirmed" | "dismissed"; isNew: boolean } | null> {
-  const { data: existing } = await supabase
-    .from("recurring_groups")
-    .select("id, status")
-    .eq("user_id", userId)
-    .eq("identity_key", key)
-    .maybeSingle();
+): Promise<{ id: string; status: RecurringGroupStatus } | null> {
+  const match = candidates.find(
+    (g) =>
+      !usedGroupIds.has(g.id) &&
+      (g.typical_amount === 0
+        ? fields.typicalAmount === 0
+        : Math.abs(fields.typicalAmount - g.typical_amount) / Math.abs(g.typical_amount) <= AMOUNT_CLUSTER_TOLERANCE),
+  );
 
-  if (existing) {
+  if (match) {
+    usedGroupIds.add(match.id);
     await supabase
       .from("recurring_groups")
       .update({
@@ -118,15 +169,16 @@ async function findOrCreateGroup(
         typical_amount: fields.typicalAmount,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", existing.id);
-    return { id: existing.id, status: existing.status, isNew: false };
+      .eq("id", match.id);
+    return { id: match.id, status: match.status };
   }
 
+  const newKey = `${counterpartyKey}:${crypto.randomUUID().slice(0, 8)}`;
   const { data: created } = await supabase
     .from("recurring_groups")
     .insert({
       user_id: userId,
-      identity_key: key,
+      identity_key: newKey,
       label: fields.label,
       interval_days: fields.intervalDays,
       typical_amount: fields.typicalAmount,
@@ -135,7 +187,9 @@ async function findOrCreateGroup(
     .select("id, status")
     .single();
 
-  return created ? { id: created.id, status: created.status, isNew: true } : null;
+  if (!created) return null;
+  usedGroupIds.add(created.id);
+  return { id: created.id, status: created.status };
 }
 
 // Additive only: extends/updates groups it finds, never demotes a group's
@@ -147,39 +201,49 @@ async function findOrCreateGroup(
 export async function recomputeRecurringGroups(userId: string): Promise<void> {
   const supabase = await createClient();
 
-  const { data: transactions } = await supabase
-    .from("transactions")
-    .select("id, occurred_at, amount, recipient, counterparty_iban")
-    .eq("user_id", userId);
+  const [{ data: transactions }, { data: existingGroups }] = await Promise.all([
+    supabase.from("transactions").select("id, occurred_at, amount, recipient, counterparty_iban").eq("user_id", userId),
+    supabase.from("recurring_groups").select("id, identity_key, typical_amount, status").eq("user_id", userId),
+  ]);
 
   if (!transactions || transactions.length === 0) return;
 
-  const groups = new Map<string, Occurrence[]>();
+  const byCounterparty = new Map<string, Occurrence[]>();
   for (const tx of transactions) {
     const key = identityKey({ recipient: tx.recipient, counterpartyIban: tx.counterparty_iban });
     if (!key) continue;
-    const list = groups.get(key) ?? [];
+    const list = byCounterparty.get(key) ?? [];
     list.push({ id: tx.id, occurredAt: tx.occurred_at, amount: tx.amount, recipient: tx.recipient });
-    groups.set(key, list);
+    byCounterparty.set(key, list);
   }
 
-  for (const [key, occurrences] of groups) {
-    const interval = detectInterval(occurrences);
-    if (!interval) continue;
-
-    const group = await findOrCreateGroup(
-      supabase,
-      userId,
-      key,
-      { label: mostCommonLabel(occurrences), intervalDays: interval, typicalAmount: typicalAmount(occurrences) },
-      "detected",
+  for (const [counterpartyKey, occurrences] of byCounterparty) {
+    const candidates = (existingGroups ?? []).filter(
+      (g) => g.identity_key === counterpartyKey || g.identity_key.startsWith(`${counterpartyKey}:`),
     );
-    if (!group) continue;
+    const usedGroupIds = new Set<string>();
 
-    const ids = occurrences.map((o) => o.id);
-    await supabase.from("transactions").update({ recurring_group_id: group.id }).in("id", ids);
-    if (group.status === "confirmed") {
-      await supabase.from("transactions").update({ is_recurring: true }).in("id", ids);
+    for (const cluster of clusterByAmount(occurrences)) {
+      const sorted = [...cluster].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+      const interval = detectInterval(sorted);
+      if (!interval) continue;
+
+      const group = await upsertClusterGroup(
+        supabase,
+        userId,
+        counterpartyKey,
+        candidates,
+        usedGroupIds,
+        { label: mostCommonLabel(sorted), intervalDays: interval, typicalAmount: typicalAmount(sorted) },
+        "detected",
+      );
+      if (!group) continue;
+
+      const ids = sorted.map((o) => o.id);
+      await supabase.from("transactions").update({ recurring_group_id: group.id }).in("id", ids);
+      if (group.status === "confirmed") {
+        await supabase.from("transactions").update({ is_recurring: true }).in("id", ids);
+      }
     }
   }
 }
@@ -271,23 +335,37 @@ export async function setTransactionRecurring(
   // Fetch-all-and-filter-in-JS (same approach as recomputeRecurringGroups)
   // rather than a `.or()` filter string — recipient text can contain
   // characters (commas, parens) that break PostgREST's filter syntax.
-  const { data: allTransactions } = await supabase
-    .from("transactions")
-    .select("id, occurred_at, amount, recipient, counterparty_iban")
-    .eq("user_id", userId);
+  const [{ data: allTransactions }, { data: existingGroups }] = await Promise.all([
+    supabase.from("transactions").select("id, occurred_at, amount, recipient, counterparty_iban").eq("user_id", userId),
+    supabase.from("recurring_groups").select("id, identity_key, typical_amount, status").eq("user_id", userId),
+  ]);
 
-  const occurrences: Occurrence[] = (allTransactions ?? [])
+  const sameCounterparty: Occurrence[] = (allTransactions ?? [])
     .filter((s) => identityKey({ recipient: s.recipient, counterpartyIban: s.counterparty_iban }) === key)
     .map((s) => ({ id: s.id, occurredAt: s.occurred_at, amount: s.amount, recipient: s.recipient }));
-  if (occurrences.every((o) => o.id !== tx.id)) {
-    occurrences.push({ id: tx.id, occurredAt: tx.occurred_at, amount: tx.amount, recipient: tx.recipient });
+  if (sameCounterparty.every((o) => o.id !== tx.id)) {
+    sameCounterparty.push({ id: tx.id, occurredAt: tx.occurred_at, amount: tx.amount, recipient: tx.recipient });
   }
 
-  const group = await findOrCreateGroup(
+  // Only the amount cluster this specific transaction belongs to — not
+  // every same-counterparty transaction regardless of amount, which would
+  // wrongly pull unrelated charges (e.g. a different tax entirely) into
+  // the same manually-confirmed group.
+  const myCluster =
+    clusterByAmount(sameCounterparty).find((cluster) => cluster.some((o) => o.id === tx.id)) ??
+    sameCounterparty.filter((o) => o.id === tx.id);
+
+  const candidates = (existingGroups ?? []).filter(
+    (g) => g.identity_key === key || g.identity_key.startsWith(`${key}:`),
+  );
+
+  const group = await upsertClusterGroup(
     supabase,
     userId,
     key,
-    { label: mostCommonLabel(occurrences), intervalDays: estimateInterval(occurrences), typicalAmount: typicalAmount(occurrences) },
+    candidates,
+    new Set(),
+    { label: mostCommonLabel(myCluster), intervalDays: estimateInterval(myCluster), typicalAmount: typicalAmount(myCluster) },
     "confirmed",
   );
   if (!group) return { success: false };

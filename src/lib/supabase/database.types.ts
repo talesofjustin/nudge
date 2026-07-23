@@ -19,9 +19,10 @@
 // 20260720134233_add_category_source_and_reviewed_at.sql,
 // 20260720134316_add_recurring_groups.sql,
 // 20260720155442_add_recurring_group_status.sql,
-// 20260721081720_remove_cash_account_type.sql, and
-// 20260721081721_add_category_sort_order.sql. Shaped the way
-// `supabase gen types typescript` would produce it, so running that command
+// 20260721081720_remove_cash_account_type.sql,
+// 20260721081721_add_category_sort_order.sql, and
+// 20260723091220_reset_recurring_groups_for_amount_clustering.sql. Shaped
+// the way `supabase gen types typescript` would produce it, so running that command
 // later (once the migrations have been applied) is a drop-in replacement for
 // this file. `Relationships` is left empty here (no typed nested-select
 // embedding) — real codegen will populate it from the FKs.

@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { buildOwnAccountSet, isTransferRecipient, normalizeRecipient } from "@/lib/known-recipients";
-import { identityKey, normalizeIban } from "@/lib/counterparty-identity";
+import { identityKey, normalizeIban, transactionMatchKey } from "@/lib/counterparty-identity";
 import { upsertUserSettings } from "@/lib/user-settings";
 import { setTransactionRecurring } from "@/lib/recurring";
 import type { CategoryKind } from "@/lib/supabase/database.types";
@@ -633,9 +633,11 @@ export async function getAllRules(): Promise<UnifiedRule[]> {
 
 // ---------------------------------------------------------------------------
 // Duplicate cleanup — exact-match duplicates within an account left over
-// from before row-level import dedup existed. Time-aware when both copies
-// have a precise time (dropping description, the least reliable field);
-// falls back to date + amount + recipient + description otherwise.
+// from before row-level import dedup existed. Matches on identity fields
+// only (counterparty + amount + date[+time]) — never category, note,
+// reviewed state, or book, since those are applied after import and a
+// transaction categorised since the original import must still be
+// recognized as a duplicate of a freshly re-imported copy.
 // ---------------------------------------------------------------------------
 
 export type DuplicateTransaction = {
@@ -652,7 +654,7 @@ export type DuplicateTransaction = {
 export type DuplicateGroup = {
   key: string;
   accountId: string;
-  matchedOn: "date-time" | "date-description";
+  matchedOn: "date-time" | "date-only";
   transactions: DuplicateTransaction[];
 };
 
@@ -674,17 +676,17 @@ export async function getDuplicateGroups(): Promise<DuplicateGroup[]> {
 
   const groups = new Map<string, DuplicateGroup>();
   for (const tx of data) {
-    const matchedOn: "date-time" | "date-description" = tx.has_precise_time ? "date-time" : "date-description";
-    const counterparty = identityKey({ recipient: tx.recipient, counterpartyIban: tx.counterparty_iban }) ?? "";
-    const key = tx.has_precise_time
-      ? [tx.account_id, tx.occurred_at, tx.amount, counterparty].join("|")
-      : [
-          tx.account_id,
-          tx.occurred_at.slice(0, 10),
-          tx.amount,
-          counterparty,
-          (tx.description ?? "").trim().toLowerCase(),
-        ].join("|");
+    const matchedOn: "date-time" | "date-only" = tx.has_precise_time ? "date-time" : "date-only";
+    const key = [
+      tx.account_id,
+      transactionMatchKey({
+        occurredAt: tx.occurred_at,
+        hasPreciseTime: tx.has_precise_time,
+        amount: tx.amount,
+        recipient: tx.recipient,
+        counterpartyIban: tx.counterparty_iban,
+      }),
+    ].join("|");
 
     const entry: DuplicateTransaction = {
       id: tx.id,

@@ -62,10 +62,7 @@ function RawDescriptionDetails({ raw, counterpartyIban }: { raw: string; counter
   );
 }
 
-type PendingOffer =
-  | { kind: "book-create"; targetId: string; label: string }
-  | { kind: "category-create"; targetId: string; label: string }
-  | { kind: "category-update"; targetId: string; oldLabel: string; newLabel: string };
+type PendingOffer = { kind: "book-create"; targetId: string; label: string };
 
 export function TransactionRow({
   row,
@@ -75,7 +72,6 @@ export function TransactionRow({
   showBookColumn,
   selected,
   bookRuleTargetId,
-  categoryRuleTargetId,
   onToggleSelect,
   onUpdate,
   onDelete,
@@ -92,7 +88,6 @@ export function TransactionRow({
   showBookColumn: boolean;
   selected: boolean;
   bookRuleTargetId: string | null;
-  categoryRuleTargetId: string | null;
   onToggleSelect: (id: string) => void;
   onUpdate: (
     id: string,
@@ -160,7 +155,10 @@ export function TransactionRow({
   // "manual" when the value actually changes; re-confirming an auto value
   // leaves it "auto" (now reviewed, so the dashed state clears but it's
   // still an auto category for anyone looking at where it came from).
-  function handleCategoryChange(categoryId: string | null) {
+  // The "remember for this recipient" decision now happens inside the
+  // picker itself (a toggle alongside the category list) rather than as a
+  // follow-up popup, so it applies in the same gesture as picking.
+  function handleCategoryChange(categoryId: string | null, remember: boolean) {
     const changed = categoryId !== row.categoryId;
     onUpdate(row.id, {
       categoryId,
@@ -168,46 +166,19 @@ export function TransactionRow({
       ...(changed && { categorySource: "manual" as const }),
     });
 
-    if (categoryId && row.recipient && changed) {
-      const category = categories.find((c) => c.id === categoryId);
-      if (!category) {
-        setPendingOffer(null);
-      } else if (categoryRuleTargetId === null) {
-        setTimeout(
-          () => setPendingOffer({ kind: "category-create", targetId: categoryId, label: category.name }),
-          OFFER_POPOVER_DELAY_MS,
-        );
-      } else if (categoryRuleTargetId !== categoryId) {
-        const oldCategory = categories.find((c) => c.id === categoryRuleTargetId);
-        setTimeout(
-          () =>
-            setPendingOffer({
-              kind: "category-update",
-              targetId: categoryId,
-              oldLabel: oldCategory?.name ?? "its old category",
-              newLabel: category.name,
-            }),
-          OFFER_POPOVER_DELAY_MS,
-        );
-      } else {
-        setPendingOffer(null);
-      }
-    } else {
-      setPendingOffer(null);
+    if (categoryId && row.recipient && remember) {
+      onOfferCategoryRule(row.recipient, categoryId);
     }
   }
 
   function confirmOffer() {
     if (!pendingOffer || !row.recipient) return;
-    if (pendingOffer.kind === "book-create") onOfferBookRule(row.recipient, pendingOffer.targetId);
-    else onOfferCategoryRule(row.recipient, pendingOffer.targetId);
+    onOfferBookRule(row.recipient, pendingOffer.targetId);
     setPendingOffer(null);
   }
 
   function offerMessage(offer: PendingOffer): string {
-    if (offer.kind === "book-create") return `Always put ${row.recipient} in ${offer.label}?`;
-    if (offer.kind === "category-create") return `Always categorise ${row.recipient} as ${offer.label}?`;
-    return `You changed ${row.recipient} from ${offer.oldLabel} to ${offer.newLabel} — update the rule?`;
+    return `Always put ${row.recipient} in ${offer.label}?`;
   }
 
   const columnCount = showBookColumn ? COLUMN_COUNT_WITH_BOOK : COLUMN_COUNT_WITHOUT_BOOK;
@@ -297,38 +268,24 @@ export function TransactionRow({
           </span>
         </td>
         <td className="truncate px-3 align-middle">
-          {/* Anchored, not inline flow: the offer floats over the table
-              instead of growing this cell (which would resize just this
-              row's height relative to its neighbors and read as a jump). */}
-          <Popover
-            open={!!pendingOffer?.kind.startsWith("category")}
-            onOpenChange={(next) => {
-              if (!next) setPendingOffer(null);
-            }}
-          >
-            <PopoverAnchor asChild>
-              <div>
-                <CategoryPicker
-                  categories={categories}
-                  value={row.categoryId}
-                  onChange={handleCategoryChange}
-                  onCreateCategory={onCreateCategory}
-                  onUpdateCategory={onUpdateCategory}
-                  emptyLabel={row.isTransfer ? "—" : undefined}
-                  unreviewed={isUnreviewedAuto}
-                />
-              </div>
-            </PopoverAnchor>
-            {pendingOffer?.kind.startsWith("category") && (
-              <PopoverContent align="start">
-                <RecipientRuleOffer
-                  message={offerMessage(pendingOffer)}
-                  onConfirm={confirmOffer}
-                  onDismiss={() => setPendingOffer(null)}
-                />
-              </PopoverContent>
-            )}
-          </Popover>
+          {row.isTransfer ? (
+            <span
+              className="text-[13px] text-muted-2"
+              title="Transfers aren't income or expense, so they can't be categorised. Remove this recipient from your own accounts to categorise it."
+            >
+              —
+            </span>
+          ) : (
+            <CategoryPicker
+              categories={categories}
+              value={row.categoryId}
+              recipient={row.recipient}
+              onChange={handleCategoryChange}
+              onCreateCategory={onCreateCategory}
+              onUpdateCategory={onUpdateCategory}
+              unreviewed={isUnreviewedAuto}
+            />
+          )}
         </td>
         {showBookColumn && (
           <td className="truncate px-3 align-middle">

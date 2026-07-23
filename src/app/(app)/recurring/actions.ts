@@ -1,7 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { confirmRecurringGroup, dismissRecurringGroup, OUTLIER_THRESHOLD } from "@/lib/recurring";
+import { confirmRecurringGroup, dismissRecurringGroup, recomputeRecurringGroups, OUTLIER_THRESHOLD } from "@/lib/recurring";
+import { buildOwnAccountSet, isTransferRecipient } from "@/lib/known-recipients";
 import type { RecurringGroupStatus } from "@/lib/supabase/database.types";
 
 export type RecurringOccurrence = {
@@ -59,6 +60,11 @@ export async function getRecurringItems(): Promise<RecurringItem[]> {
   } = await supabase.auth.getUser();
   if (!user) return [];
 
+  // Rebuild groups on every visit rather than only after import — cheap
+  // relative to a page load, and it's what makes the amount-clustering
+  // reset migration actually take effect without requiring a fresh import.
+  await recomputeRecurringGroups(user.id);
+
   const { data: groups } = await supabase
     .from("recurring_groups")
     .select("id, label, interval_days, typical_amount, status")
@@ -68,11 +74,22 @@ export async function getRecurringItems(): Promise<RecurringItem[]> {
   if (!groups || groups.length === 0) return [];
 
   const groupIds = groups.map((g) => g.id);
-  const { data: transactions } = await supabase
-    .from("transactions")
-    .select("id, occurred_at, amount, category_id, account_id, recurring_group_id")
-    .eq("user_id", user.id)
-    .in("recurring_group_id", groupIds);
+  const [{ data: transactions }, { data: knownRecipients }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("id, occurred_at, amount, category_id, account_id, recurring_group_id, recipient, counterparty_iban")
+      .eq("user_id", user.id)
+      .in("recurring_group_id", groupIds),
+    supabase.from("known_recipients").select("recipient, counterparty_iban, is_own_account").eq("user_id", user.id),
+  ]);
+
+  const ownAccountKeys = buildOwnAccountSet(
+    (knownRecipients ?? []).map((kr) => ({
+      recipient: kr.recipient,
+      counterpartyIban: kr.counterparty_iban,
+      isOwnAccount: kr.is_own_account,
+    })),
+  );
 
   const txByGroup = new Map<string, typeof transactions>();
   for (const tx of transactions ?? []) {
@@ -88,6 +105,17 @@ export async function getRecurringItems(): Promise<RecurringItem[]> {
   for (const group of groups) {
     const groupTx = (txByGroup.get(group.id) ?? []).slice().sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
     if (groupTx.length === 0) continue;
+
+    // This page exists to find costs to cut — income and transfers
+    // between the user's own accounts are neither. Filtered here (display
+    // only): is_recurring / recurring_groups still apply to income, since
+    // Budget, Dashboard and Wishlist need predictable revenue later.
+    const representative = groupTx[groupTx.length - 1];
+    const isTransfer = isTransferRecipient(
+      { recipient: representative.recipient, counterpartyIban: representative.counterparty_iban },
+      ownAccountKeys,
+    );
+    if (group.typical_amount >= 0 || isTransfer) continue;
 
     const occurrences: RecurringOccurrence[] = groupTx.map((tx) => ({
       id: tx.id,

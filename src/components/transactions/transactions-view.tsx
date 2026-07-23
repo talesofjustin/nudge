@@ -18,7 +18,6 @@ import {
   markTransactionsReviewed,
   getRecipientBookRules,
   setRecipientBookRule,
-  getRecipientCategoryRules,
   setRecipientCategoryRule,
   getDuplicateGroups,
   type TransactionRowData,
@@ -74,7 +73,6 @@ export function TransactionsView({
   const [showOnlyUnassignedBook, setShowOnlyUnassignedBook] = useState(false);
   const [showOnlyUnreviewed, setShowOnlyUnreviewed] = useState(false);
   const [bookRules, setBookRules] = useState<Map<string, string>>(new Map());
-  const [categoryRules, setCategoryRules] = useState<Map<string, string>>(new Map());
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
   const [duplicateBannerDismissed, setDuplicateBannerDismissed] = useState(false);
   const [reviewingDuplicates, setReviewingDuplicates] = useState(false);
@@ -87,22 +85,11 @@ export function TransactionsView({
 
   useEffect(() => {
     (async () => {
-      const [bookRuleList, categoryRuleList, duplicates] = await Promise.all([
-        getRecipientBookRules(),
-        getRecipientCategoryRules(),
-        getDuplicateGroups(),
-      ]);
+      const [bookRuleList, duplicates] = await Promise.all([getRecipientBookRules(), getDuplicateGroups()]);
       setBookRules(
         new Map(
           bookRuleList
             .map((r) => [identityKey({ recipient: r.recipient, counterpartyIban: r.counterpartyIban }), r.bookId] as const)
-            .filter((entry): entry is [string, string] => entry[0] !== null),
-        ),
-      );
-      setCategoryRules(
-        new Map(
-          categoryRuleList
-            .map((r) => [identityKey({ recipient: r.recipient, counterpartyIban: r.counterpartyIban }), r.categoryId] as const)
             .filter((entry): entry is [string, string] => entry[0] !== null),
         ),
       );
@@ -121,6 +108,21 @@ export function TransactionsView({
     return true;
   });
 
+  function buildFilterParams() {
+    const min = filters.amountMin.trim() ? Number(filters.amountMin) : null;
+    const max = filters.amountMax.trim() ? Number(filters.amountMax) : null;
+    return {
+      bookId: filters.bookId,
+      accountId: filters.accountId,
+      categoryIds: filters.categoryIds,
+      amountMin: min !== null && !Number.isNaN(min) ? min : null,
+      amountMax: max !== null && !Number.isNaN(max) ? max : null,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      recipient: filters.recipient,
+    };
+  }
+
   // Debounced refetch + URL sync whenever any filter changes (skips the
   // first render — the server already fetched matching the initial URL).
   useEffect(() => {
@@ -136,19 +138,7 @@ export function TransactionsView({
       setError(null);
       setSelectedIds(new Set());
 
-      const min = filters.amountMin.trim() ? Number(filters.amountMin) : null;
-      const max = filters.amountMax.trim() ? Number(filters.amountMax) : null;
-
-      const res = await getFilteredTransactions({
-        bookId: filters.bookId,
-        accountId: filters.accountId,
-        categoryIds: filters.categoryIds,
-        amountMin: min !== null && !Number.isNaN(min) ? min : null,
-        amountMax: max !== null && !Number.isNaN(max) ? max : null,
-        dateFrom: filters.dateFrom,
-        dateTo: filters.dateTo,
-        recipient: filters.recipient,
-      });
+      const res = await getFilteredTransactions(buildFilterParams());
 
       setLoading(false);
       if (!res.success) {
@@ -170,7 +160,7 @@ export function TransactionsView({
     handleFilterChange({ recipient });
   }
 
-  function handleUpdate(
+  async function handleUpdate(
     id: string,
     updates: {
       description?: string;
@@ -182,7 +172,17 @@ export function TransactionsView({
     },
   ) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...toRowPatch(updates) } : r)));
-    void updateTransaction(id, updates);
+    await updateTransaction(id, updates);
+
+    // Flagging/unflagging recurring status can create, extend, or reassign
+    // a whole recurring_groups cluster server-side — a full refetch is the
+    // only way this row (and any siblings in the same amount cluster) picks
+    // up the server-computed recurringTypicalAmount/isRecurringOutlier
+    // fields without a manual reselect.
+    if (updates.isRecurring !== undefined) {
+      const res = await getFilteredTransactions(buildFilterParams());
+      if (res.success) setRows(res.rows);
+    }
   }
 
   async function handleDeleteRow(id: string) {
@@ -226,8 +226,6 @@ export function TransactionsView({
 
   async function handleOfferCategoryRule(recipient: string, categoryId: string) {
     const row = rows.find((r) => r.recipient === recipient);
-    const key = identityKey({ recipient, counterpartyIban: row?.counterpartyIban });
-    if (key) setCategoryRules((prev) => new Map(prev).set(key, categoryId));
     await setRecipientCategoryRule(recipient, categoryId, row?.counterpartyIban ?? null);
   }
 
@@ -401,7 +399,6 @@ export function TransactionsView({
                         showBookColumn={showBookFeature}
                         selected={selectedIds.has(row.id)}
                         bookRuleTargetId={key ? (bookRules.get(key) ?? null) : null}
-                        categoryRuleTargetId={key ? (categoryRules.get(key) ?? null) : null}
                         onToggleSelect={toggleSelect}
                         onUpdate={handleUpdate}
                         onDelete={handleDeleteRow}

@@ -71,7 +71,7 @@ export function DuplicateReview({
         {groups.map((g) => (
           <div key={g.key} className="px-4 py-3">
             <p className="text-[11px] text-muted-2">
-              Matched on {g.matchedOn === "date-time" ? "date, time, amount, and recipient" : "date, amount, recipient, and description"}
+              Matched on {g.matchedOn === "date-time" ? "date, time, amount, and recipient" : "date, amount, and recipient"}
             </p>
 
             <div className="mt-2 flex flex-col gap-2">
