@@ -80,6 +80,7 @@ export function TransactionRow({
   onOfferCategoryRule,
   onSplitsChanged,
   onToggleTransfer,
+  fading = false,
 }: {
   row: TransactionRowData;
   accountName: string;
@@ -87,6 +88,10 @@ export function TransactionRow({
   categories: CategoryInfo[];
   showBookColumn: boolean;
   selected: boolean;
+  // True for the brief window after this row resolves while the
+  // needs-review filter is active — it fades out here instead of vanishing
+  // the instant transactions-view.tsx's filter would otherwise drop it.
+  fading?: boolean;
   onToggleSelect: (id: string) => void;
   onUpdate: (
     id: string,
@@ -165,7 +170,11 @@ export function TransactionRow({
 
   return (
     <>
-      <tr className="group h-[52px] border-b border-border last:border-0 hover:bg-canvas">
+      <tr
+        className={`group h-[52px] border-b border-border transition-opacity duration-300 last:border-0 hover:bg-canvas ${
+          fading ? "pointer-events-none opacity-25" : "opacity-100"
+        }`}
+      >
         <td className="px-3 text-center align-middle">
           <input
             type="checkbox"

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { CheckIcon } from "@/components/icons/dashboard-icons";
 import { TransactionsToolbar } from "@/components/transactions/transactions-toolbar";
 import { ContextStrip } from "@/components/transactions/context-strip";
@@ -25,7 +25,7 @@ import {
   type TransactionRowData,
   type DuplicateGroup,
 } from "@/app/(app)/transactions/actions";
-import type { TransactionSplitData } from "@/app/(app)/transactions/split-actions";
+import { saveTransactionSplits, type TransactionSplitData } from "@/app/(app)/transactions/split-actions";
 import { filtersToSearchParams, type FiltersState } from "@/lib/transaction-filters";
 import { identityKey } from "@/lib/counterparty-identity";
 import type { CategoryKind } from "@/lib/supabase/database.types";
@@ -79,6 +79,7 @@ export function TransactionsView({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const [filters, setFilters] = useState<FiltersState>(initialFilters);
   const [categories, setCategories] = useState<CategoryInfo[]>(initialCategories);
@@ -89,9 +90,19 @@ export function TransactionsView({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [marking, setMarking] = useState(false);
-  const [showOnlyUncategorized, setShowOnlyUncategorized] = useState(false);
-  const [showOnlyUnassignedBook, setShowOnlyUnassignedBook] = useState(false);
+  // Bookmarkable like the other toolbar filters (see the URL-sync effect
+  // below), but deliberately kept out of `filters`/buildFilterParams — it's
+  // a pure client-side view over already-fetched `rows`, not a server
+  // query param, so toggling it must never trigger the debounced refetch.
+  const [showOnlyNeedsReview, setShowOnlyNeedsReview] = useState(() => searchParams.get("review") === "1");
   const [showOnlyUnreviewed, setShowOnlyUnreviewed] = useState(false);
+  // Rows that just resolved while the needs-review filter is active: kept
+  // in `visibleRows` a moment longer (rendered with a fade) instead of
+  // vanishing the instant they'd otherwise drop out of the filter, and
+  // what the toast's "Undo" reverts.
+  const [pendingRemovalIds, setPendingRemovalIds] = useState<Set<string>>(new Set());
+  const [reviewToast, setReviewToast] = useState<{ ids: string[]; message: string; undo: () => void } | null>(null);
+  const toastHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
   const [duplicateBannerDismissed, setDuplicateBannerDismissed] = useState(false);
   const [reviewingDuplicates, setReviewingDuplicates] = useState(false);
@@ -117,17 +128,24 @@ export function TransactionsView({
   function isFullyCategorized(r: TransactionRowData): boolean {
     return r.splits.length > 0 ? r.splits.every((s) => s.categoryId !== null) : r.categoryId !== null;
   }
-  const uncategorizedCount = rows.reduce((sum, r) => {
-    if (r.isTransfer) return sum;
-    if (r.splits.length > 0) return sum + r.splits.filter((s) => s.categoryId === null).length;
-    return sum + (r.categoryId ? 0 : 1);
-  }, 0);
-  const unassignedBookCount = showBookFeature ? rows.filter((r) => !r.bookId).length : 0;
   const unreviewedCount = rows.filter((r) => r.categorySource === "auto" && !r.reviewedAt).length;
 
   function isRowResolved(r: TransactionRowData): boolean {
     return r.isTransfer || isFullyCategorized(r);
   }
+
+  // The "needs review" indicator's scope: uncategorized (transfers never
+  // count — they can't be categorised) OR, once there's more than one
+  // book, missing a book assignment. Distinct from isRowResolved above,
+  // which stays category-only since that one drives import-review
+  // progress specifically, not this general-purpose indicator.
+  function needsReview(r: TransactionRowData): boolean {
+    const categoryNeeded = !r.isTransfer && !isFullyCategorized(r);
+    const bookNeeded = showBookFeature && !r.bookId;
+    return categoryNeeded || bookNeeded;
+  }
+  const needsReviewCount = rows.filter(needsReview).length;
+  const needsReviewLabel = showBookFeature ? "need review" : "uncategorized";
 
   // Reviewing a single import (arrived via the review-queue link, see
   // import/review-queue-actions.ts): `rows` is already scoped to exactly
@@ -147,8 +165,10 @@ export function TransactionsView({
 
   const visibleRows = rows
     .filter((r) => {
-      if (showOnlyUncategorized && (r.isTransfer || isFullyCategorized(r))) return false;
-      if (showOnlyUnassignedBook && r.bookId) return false;
+      // A row that just resolved stays visible (mid-fade, see
+      // pendingRemovalIds) instead of disappearing the instant it would
+      // otherwise fail this filter.
+      if (showOnlyNeedsReview && !needsReview(r) && !pendingRemovalIds.has(r.id)) return false;
       if (showOnlyUnreviewed && !(r.categorySource === "auto" && !r.reviewedAt)) return false;
       return true;
     })
@@ -178,6 +198,12 @@ export function TransactionsView({
     };
   }
 
+  function buildUrlParams() {
+    const params = filtersToSearchParams(filters);
+    if (showOnlyNeedsReview) params.set("review", "1");
+    return params;
+  }
+
   // Debounced refetch + URL sync whenever any filter changes (skips the
   // first render — the server already fetched matching the initial URL).
   useEffect(() => {
@@ -186,7 +212,7 @@ export function TransactionsView({
       return;
     }
 
-    router.replace(`${pathname}?${filtersToSearchParams(filters).toString()}`, { scroll: false });
+    router.replace(`${pathname}?${buildUrlParams().toString()}`, { scroll: false });
 
     const timeout = setTimeout(async () => {
       setLoading(true);
@@ -207,6 +233,60 @@ export function TransactionsView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
+  // The needs-review toggle is view-only (see its useState comment above)
+  // — URL-synced on its own so refreshing/sharing the link preserves it,
+  // but without the debounced network refetch the filters effect above
+  // triggers.
+  const isFirstReviewRender = useRef(true);
+  useEffect(() => {
+    if (isFirstReviewRender.current) {
+      isFirstReviewRender.current = false;
+      return;
+    }
+    router.replace(`${pathname}?${buildUrlParams().toString()}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showOnlyNeedsReview]);
+
+  // Fades a just-resolved row out instead of yanking it from the filtered
+  // list, and surfaces a toast whose "Undo" reverses exactly that change.
+  // Only fires while the needs-review filter is actually active — outside
+  // it there's nothing to animate out of.
+  function flashResolved(ids: string[], message: string, undo: () => void) {
+    if (!showOnlyNeedsReview || ids.length === 0) return;
+
+    setPendingRemovalIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+
+    if (toastHideTimeoutRef.current) clearTimeout(toastHideTimeoutRef.current);
+    setReviewToast({ ids, message, undo });
+    toastHideTimeoutRef.current = setTimeout(() => {
+      setReviewToast((t) => (t && t.ids === ids ? null : t));
+    }, 5000);
+
+    setTimeout(() => {
+      setPendingRemovalIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, 450);
+  }
+
+  function handleUndoToast() {
+    if (!reviewToast) return;
+    reviewToast.undo();
+    setPendingRemovalIds((prev) => {
+      const next = new Set(prev);
+      reviewToast.ids.forEach((id) => next.delete(id));
+      return next;
+    });
+    if (toastHideTimeoutRef.current) clearTimeout(toastHideTimeoutRef.current);
+    setReviewToast(null);
+  }
+
   function handleFilterChange(patch: Partial<FiltersState>) {
     setFilters((prev) => ({ ...prev, ...patch }));
   }
@@ -226,6 +306,7 @@ export function TransactionsView({
       bookId?: string | null;
     },
   ) {
+    const prevRow = rows.find((r) => r.id === id);
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...toRowPatch(updates) } : r)));
     await updateTransaction(id, updates);
 
@@ -237,6 +318,27 @@ export function TransactionsView({
     if (updates.isRecurring !== undefined) {
       const res = await getFilteredTransactions(buildFilterParams());
       if (res.success) setRows(res.rows);
+    }
+
+    if (prevRow) {
+      const nextRow = { ...prevRow, ...toRowPatch(updates) };
+      if (needsReview(prevRow) && !needsReview(nextRow)) {
+        if (updates.categoryId !== undefined) {
+          const categoryName = categories.find((c) => c.id === updates.categoryId)?.name;
+          flashResolved([id], categoryName ? `Categorized as ${categoryName}` : "Categorized", () =>
+            handleUpdate(id, {
+              categoryId: prevRow.categoryId,
+              categorySource: prevRow.categorySource,
+              reviewedAt: prevRow.reviewedAt,
+            }),
+          );
+        } else if (updates.bookId !== undefined) {
+          const bookName = books.find((b) => b.id === updates.bookId)?.name;
+          flashResolved([id], bookName ? `Assigned to ${bookName}` : "Book assigned", () =>
+            handleUpdate(id, { bookId: prevRow.bookId }),
+          );
+        }
+      }
     }
   }
 
@@ -283,7 +385,22 @@ export function TransactionsView({
   }
 
   function handleSplitsChanged(id: string, splits: TransactionSplitData[]) {
+    const prevRow = rows.find((r) => r.id === id);
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, splits } : r)));
+
+    if (prevRow) {
+      const nextRow = { ...prevRow, splits };
+      if (needsReview(prevRow) && !needsReview(nextRow)) {
+        const prevSplits = prevRow.splits;
+        flashResolved([id], "Categorized", async () => {
+          const res = await saveTransactionSplits(
+            id,
+            prevSplits.map((s) => ({ categoryId: s.categoryId, bookId: s.bookId, amount: s.amount, note: s.note })),
+          );
+          if (res.success) setRows((prev) => prev.map((r) => (r.id === id ? { ...r, splits: res.splits } : r)));
+        });
+      }
+    }
   }
 
   // Marking/unmarking a transfer is a decision about the counterparty, not
@@ -294,14 +411,18 @@ export function TransactionsView({
     const source = rows.find((r) => r.recipient === recipient);
     const iban = source?.counterpartyIban ?? null;
     const key = identityKey({ recipient, counterpartyIban: iban });
+    const matches = (r: TransactionRowData) =>
+      identityKey({ recipient: r.recipient, counterpartyIban: r.counterpartyIban }) === key;
 
-    setRows((prev) =>
-      prev.map((r) =>
-        identityKey({ recipient: r.recipient, counterpartyIban: r.counterpartyIban }) === key
-          ? { ...r, isTransfer: markAsTransfer }
-          : r,
-      ),
-    );
+    const resolvedIds = markAsTransfer
+      ? rows.filter((r) => matches(r) && needsReview(r) && !needsReview({ ...r, isTransfer: true })).map((r) => r.id)
+      : [];
+
+    setRows((prev) => prev.map((r) => (matches(r) ? { ...r, isTransfer: markAsTransfer } : r)));
+
+    if (resolvedIds.length > 0) {
+      flashResolved(resolvedIds, "Marked as transfer", () => handleToggleTransfer(recipient, false));
+    }
 
     if (markAsTransfer) await resolveTransferFlag(recipient, true, iban);
     else await unflagKnownRecipient(recipient, iban);
@@ -416,13 +537,10 @@ export function TransactionsView({
         dateFrom={filters.dateFrom}
         dateTo={filters.dateTo}
         count={visibleRows.length}
-        uncategorizedCount={uncategorizedCount}
-        showOnlyUncategorized={showOnlyUncategorized}
-        onToggleUncategorized={() => setShowOnlyUncategorized((v) => !v)}
-        unassignedBookCount={unassignedBookCount}
-        showOnlyUnassignedBook={showOnlyUnassignedBook}
-        onToggleUnassignedBook={() => setShowOnlyUnassignedBook((v) => !v)}
-        showBookFeature={showBookFeature}
+        needsReviewCount={needsReviewCount}
+        needsReviewLabel={needsReviewLabel}
+        showOnlyNeedsReview={showOnlyNeedsReview}
+        onToggleNeedsReview={() => setShowOnlyNeedsReview((v) => !v)}
         unreviewedCount={unreviewedCount}
         showOnlyUnreviewed={showOnlyUnreviewed}
         onToggleUnreviewed={() => setShowOnlyUnreviewed((v) => !v)}
@@ -458,15 +576,21 @@ export function TransactionsView({
           {loading && <p className="px-4 py-3 text-[13px] text-muted">Updating…</p>}
 
           {visibleRows.length === 0 && !loading ? (
-            <p className="px-4 py-12 text-center text-[13px] text-muted">
-              {showOnlyUncategorized
-                ? "No uncategorized transactions in this period."
-                : showOnlyUnassignedBook
-                  ? "No transactions need a book in this period."
-                  : showOnlyUnreviewed
-                    ? "No auto-categorised transactions waiting for review."
-                    : "No transactions match these filters."}
-            </p>
+            showOnlyNeedsReview ? (
+              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-mint text-white">
+                  <CheckIcon className="h-4 w-4" />
+                </span>
+                <p className="text-[13.5px] font-medium text-foreground">All caught up</p>
+                <p className="text-[12.5px] text-muted">Nothing in this period needs review.</p>
+              </div>
+            ) : (
+              <p className="px-4 py-12 text-center text-[13px] text-muted">
+                {showOnlyUnreviewed
+                  ? "No auto-categorised transactions waiting for review."
+                  : "No transactions match these filters."}
+              </p>
+            )
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full table-fixed border-collapse text-left">
@@ -523,6 +647,7 @@ export function TransactionsView({
                       onOfferCategoryRule={handleOfferCategoryRule}
                       onSplitsChanged={handleSplitsChanged}
                       onToggleTransfer={handleToggleTransfer}
+                      fading={pendingRemovalIds.has(row.id)}
                     />
                   ))}
                 </tbody>
@@ -532,6 +657,17 @@ export function TransactionsView({
         </>
       )}
       </div>
+
+      {reviewToast && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2" style={{ animation: "fade-in-up 0.25s ease-out" }}>
+          <div className="shadow-soft flex items-center gap-3 rounded-full bg-ink-solid px-4 py-2.5 text-[13px] text-white">
+            <span>{reviewToast.message}</span>
+            <button type="button" onClick={handleUndoToast} className="font-medium text-violet-300 hover:text-white">
+              Undo
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

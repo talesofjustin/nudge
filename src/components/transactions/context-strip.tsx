@@ -1,5 +1,7 @@
 "use client";
 
+import { FilterIcon } from "@/components/icons/dashboard-icons";
+
 function formatDay(iso: string): string {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
     day: "numeric",
@@ -21,6 +23,10 @@ function formatRangeLabel(dateFrom: string, dateTo: string): string {
   return `${formatDay(dateFrom)} – ${formatDayWithYear(dateTo)}`;
 }
 
+// Same active treatment as the toolbar's SecondaryFilterChip (violet
+// border + tint once engaged) plus a filter icon so the chip reads as
+// "click to filter" rather than a static status badge, and a visible
+// hover state so it doesn't look inert before the first click.
 function StatusChip({
   active,
   tone,
@@ -37,7 +43,8 @@ function StatusChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex h-6 items-center rounded-full px-2.5 text-[12px] font-medium transition-shadow ${
+      aria-pressed={active}
+      className={`inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-[12px] font-medium transition-all hover:brightness-95 active:scale-[0.97] ${
         active ? `ring-2 ring-offset-1 ring-offset-canvas ${tone === "amber" ? "ring-amber" : "ring-violet-400"}` : ""
       }`}
       style={{
@@ -45,6 +52,7 @@ function StatusChip({
         color: `color-mix(in srgb, ${colorVar} 70%, black)`,
       }}
     >
+      <FilterIcon className="h-3 w-3 shrink-0 opacity-70" />
       {children}
     </button>
   );
@@ -54,13 +62,10 @@ export function ContextStrip({
   dateFrom,
   dateTo,
   count,
-  uncategorizedCount,
-  showOnlyUncategorized,
-  onToggleUncategorized,
-  unassignedBookCount,
-  showOnlyUnassignedBook,
-  onToggleUnassignedBook,
-  showBookFeature,
+  needsReviewCount,
+  needsReviewLabel,
+  showOnlyNeedsReview,
+  onToggleNeedsReview,
   unreviewedCount,
   showOnlyUnreviewed,
   onToggleUnreviewed,
@@ -80,13 +85,10 @@ export function ContextStrip({
   dateFrom: string;
   dateTo: string;
   count: number;
-  uncategorizedCount: number;
-  showOnlyUncategorized: boolean;
-  onToggleUncategorized: () => void;
-  unassignedBookCount: number;
-  showOnlyUnassignedBook: boolean;
-  onToggleUnassignedBook: () => void;
-  showBookFeature: boolean;
+  needsReviewCount: number;
+  needsReviewLabel: string;
+  showOnlyNeedsReview: boolean;
+  onToggleNeedsReview: () => void;
   unreviewedCount: number;
   showOnlyUnreviewed: boolean;
   onToggleUnreviewed: () => void;
@@ -183,14 +185,9 @@ export function ContextStrip({
           )
         ) : (
           <div className="flex items-center gap-2">
-            {uncategorizedCount > 0 && (
-              <StatusChip tone="amber" active={showOnlyUncategorized} onClick={onToggleUncategorized}>
-                {uncategorizedCount} uncategorized
-              </StatusChip>
-            )}
-            {showBookFeature && unassignedBookCount > 0 && (
-              <StatusChip tone="violet" active={showOnlyUnassignedBook} onClick={onToggleUnassignedBook}>
-                {unassignedBookCount} need a book
+            {needsReviewCount > 0 && (
+              <StatusChip tone="amber" active={showOnlyNeedsReview} onClick={onToggleNeedsReview}>
+                {needsReviewCount} {needsReviewLabel}
               </StatusChip>
             )}
             {unreviewedCount > 0 && (
