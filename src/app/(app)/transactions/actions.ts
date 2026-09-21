@@ -21,6 +21,7 @@ export type TransactionFilters = {
   dateFrom: string | null;
   dateTo: string | null;
   recipient: string | null;
+  importId: string | null;
 };
 
 export type TransactionRowData = {
@@ -73,6 +74,7 @@ export async function getFilteredTransactions(
   if (filters.dateFrom) query = query.gte("occurred_at", filters.dateFrom);
   if (filters.dateTo) query = query.lte("occurred_at", filters.dateTo);
   if (filters.recipient) query = query.ilike("recipient", filters.recipient);
+  if (filters.importId) query = query.eq("import_id", filters.importId);
 
   const [{ data, error }, ownAccountSet, { data: recurringGroups }] = await Promise.all([
     query,

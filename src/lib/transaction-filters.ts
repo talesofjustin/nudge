@@ -10,6 +10,11 @@ export type FiltersState = {
   amountMin: string;
   amountMax: string;
   recipient: string | null;
+  // Scopes to exactly one import batch (the review-queue flow) —
+  // deliberately separate from bookId/accountId/date range, since two
+  // imports for the same account can have overlapping date ranges and
+  // only the import id disambiguates which rows belong to which.
+  importId: string | null;
 };
 
 export type SearchParamsInput = { [key: string]: string | string[] | undefined };
@@ -46,6 +51,7 @@ export function parseFiltersFromParams(
     amountMin: firstValue(params.amountMin) ?? "",
     amountMax: firstValue(params.amountMax) ?? "",
     recipient: firstValue(params.recipient),
+    importId: firstValue(params.import),
   };
 }
 
@@ -60,5 +66,6 @@ export function filtersToSearchParams(filters: FiltersState): URLSearchParams {
   if (filters.amountMin) params.set("amountMin", filters.amountMin);
   if (filters.amountMax) params.set("amountMax", filters.amountMax);
   if (filters.recipient) params.set("recipient", filters.recipient);
+  if (filters.importId) params.set("import", filters.importId);
   return params;
 }

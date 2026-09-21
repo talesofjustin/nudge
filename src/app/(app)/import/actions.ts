@@ -212,6 +212,34 @@ export async function importTransactions(
     (categoryRules ?? []).map((r) => ({ recipient: r.recipient, counterpartyIban: r.counterparty_iban, categoryId: r.category_id })),
   );
 
+  const dates = rows.map((r) => r.date).sort();
+  const statementStartDate = dates[0]?.slice(0, 10) ?? null;
+  const statementEndDate = dates[dates.length - 1]?.slice(0, 10) ?? null;
+
+  // Inserted first (not as a best-effort history log after the fact) so
+  // its id exists to stamp onto every transaction row below — that's what
+  // lets the import-review queue identify exactly which transactions
+  // belong to this batch, rather than an ambiguous account+date-range
+  // guess that breaks when two imports for the same account overlap.
+  const { data: importRow, error: importError } = await supabase
+    .from("imports")
+    .insert({
+      user_id: user.id,
+      account_id: accountId,
+      book_id: account.default_book_id,
+      filename,
+      row_count: rows.length,
+      skipped_count: skippedCount,
+      statement_start_date: statementStartDate,
+      statement_end_date: statementEndDate,
+    })
+    .select("id")
+    .single();
+
+  if (importError || !importRow) {
+    return { success: false, error: "Could not record this import." };
+  }
+
   const { error: insertError } = await supabase.from("transactions").insert(
     rows.map((row) => {
       const counterparty = { recipient: row.recipient, counterpartyIban: row.counterpartyIban };
@@ -239,6 +267,7 @@ export async function importTransactions(
         occurred_at: row.date,
         has_precise_time: row.hasPreciseTime,
         recurring_reference: row.recurringReference,
+        import_id: importRow.id,
         is_recurring: false,
       };
     }),
@@ -247,23 +276,6 @@ export async function importTransactions(
   if (insertError) {
     return { success: false, error: insertError.message };
   }
-
-  const dates = rows.map((r) => r.date).sort();
-  const statementStartDate = dates[0]?.slice(0, 10) ?? null;
-  const statementEndDate = dates[dates.length - 1]?.slice(0, 10) ?? null;
-
-  // Best-effort history log — the transactions themselves already landed
-  // successfully above, so a failure here shouldn't fail the whole import.
-  await supabase.from("imports").insert({
-    user_id: user.id,
-    account_id: accountId,
-    book_id: account.default_book_id,
-    filename,
-    row_count: rows.length,
-    skipped_count: skippedCount,
-    statement_start_date: statementStartDate,
-    statement_end_date: statementEndDate,
-  });
 
   // Best-effort: new rows can extend or newly reveal a recurring pattern,
   // so groups are recomputed after every import. Never blocks the import

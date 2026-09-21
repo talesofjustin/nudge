@@ -41,10 +41,33 @@ export default async function TransactionsPage({
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
         recipient: filters.recipient,
+        importId: filters.importId,
       }),
     ]);
 
   const initialRows = transactionsResult.success ? transactionsResult.rows : [];
+
+  // When arriving scoped to a specific import (the review-queue flow),
+  // fetch that import's own metadata for the persistent "Reviewing: ..."
+  // header — the filter only carries the id, not anything displayable.
+  const importContext = filters.importId
+    ? await (async () => {
+        const { data: imp } = await supabase
+          .from("imports")
+          .select("id, account_id, book_id, statement_start_date, statement_end_date")
+          .eq("id", filters.importId!)
+          .maybeSingle();
+        if (!imp) return null;
+        const accountName = (accounts ?? []).find((a) => a.id === imp.account_id)?.name ?? "Unknown account";
+        const bookName = imp.book_id ? ((books ?? []).find((b) => b.id === imp.book_id)?.name ?? null) : null;
+        return {
+          accountName,
+          bookName,
+          statementStartDate: imp.statement_start_date,
+          statementEndDate: imp.statement_end_date,
+        };
+      })()
+    : null;
 
   // Reactive introduction (section 14): only offered pre-books, only once
   // there are enough accounts for a split to plausibly matter, and never
@@ -65,6 +88,7 @@ export default async function TransactionsPage({
         initialRows={initialRows}
         initialFilters={filters}
         paydayAnchorDay={settings.paydayAnchorDay}
+        importContext={importContext}
       />
     </div>
   );

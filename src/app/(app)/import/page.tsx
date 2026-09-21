@@ -1,14 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserSettings } from "@/lib/user-settings";
 import { getImportAccounts } from "@/app/(app)/import/actions";
+import { getImportReviewQueue } from "@/app/(app)/import/review-queue-actions";
 import { ImportWizard } from "@/components/import/import-wizard";
 import { ImportHistory } from "@/components/import/import-history";
+import { ImportReviewQueue } from "@/components/import/import-review-queue";
 import { PageHeader } from "@/components/ui/page-header";
 
 export default async function ImportPage() {
   const supabase = await createClient();
 
-  const [accounts, { data: books }, settings, { data: imports }] = await Promise.all([
+  const [accounts, { data: books }, settings, { data: imports }, reviewQueue] = await Promise.all([
     getImportAccounts(),
     supabase
       .from("books")
@@ -21,6 +23,7 @@ export default async function ImportPage() {
         "id, filename, row_count, skipped_count, statement_start_date, statement_end_date, created_at, account_id, book_id",
       )
       .order("created_at", { ascending: false }),
+    getImportReviewQueue(),
   ]);
 
   const showBookFeature = (books?.length ?? 0) > 1;
@@ -41,6 +44,8 @@ export default async function ImportPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Import" subtitle="Upload a CSV export from your bank or card statement." />
+
+      <ImportReviewQueue items={reviewQueue} />
 
       <ImportWizard accounts={accounts} books={books ?? []} settings={settings} />
 

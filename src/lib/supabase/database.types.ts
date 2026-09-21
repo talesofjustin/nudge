@@ -22,8 +22,10 @@
 // 20260721081720_remove_cash_account_type.sql,
 // 20260721081721_add_category_sort_order.sql,
 // 20260723091220_reset_recurring_groups_for_amount_clustering.sql,
-// 20260921170520_add_recurring_reference.sql, and
-// 20260921174309_add_transaction_splits.sql. Shaped
+// 20260921170520_add_recurring_reference.sql,
+// 20260921174309_add_transaction_splits.sql,
+// 20260921175222_rename_shared_book_to_joint.sql, and
+// 20260921180116_add_transaction_import_id.sql. Shaped
 // the way `supabase gen types typescript` would produce it, so running that command
 // later (once the migrations have been applied) is a drop-in replacement for
 // this file. `Relationships` is left empty here (no typed nested-select
@@ -155,6 +157,7 @@ export type Database = {
           is_recurring: boolean;
           recurring_group_id: string | null;
           recurring_reference: string | null;
+          import_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -175,6 +178,7 @@ export type Database = {
           is_recurring?: boolean;
           recurring_group_id?: string | null;
           recurring_reference?: string | null;
+          import_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -195,6 +199,7 @@ export type Database = {
           is_recurring?: boolean;
           recurring_group_id?: string | null;
           recurring_reference?: string | null;
+          import_id?: string | null;
           created_at?: string;
         };
         Relationships: [];

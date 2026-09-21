@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+import { CheckIcon } from "@/components/icons/dashboard-icons";
 import { TransactionsToolbar } from "@/components/transactions/transactions-toolbar";
 import { ContextStrip } from "@/components/transactions/context-strip";
 import { TransactionRow } from "@/components/transactions/transaction-row";
@@ -41,6 +43,20 @@ function getColumns(showBookColumn: boolean): { label: string; width: string; al
   return base;
 }
 
+export type ImportReviewContext = {
+  accountName: string;
+  bookName: string | null;
+  statementStartDate: string | null;
+  statementEndDate: string | null;
+};
+
+function formatReviewPeriod(start: string | null, end: string | null): string {
+  if (!start || !end) return "";
+  const fmt = (d: string) =>
+    new Date(`${d}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "UTC" });
+  return `${fmt(start)} – ${fmt(end)}`;
+}
+
 export function TransactionsView({
   accounts,
   books,
@@ -48,6 +64,7 @@ export function TransactionsView({
   initialRows,
   initialFilters,
   paydayAnchorDay,
+  importContext = null,
 }: {
   accounts: { id: string; name: string }[];
   books: BookInfo[];
@@ -55,6 +72,7 @@ export function TransactionsView({
   initialRows: TransactionRowData[];
   initialFilters: FiltersState;
   paydayAnchorDay: number | null;
+  importContext?: ImportReviewContext | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -104,12 +122,34 @@ export function TransactionsView({
   const unassignedBookCount = showBookFeature ? rows.filter((r) => !r.bookId).length : 0;
   const unreviewedCount = rows.filter((r) => r.categorySource === "auto" && !r.reviewedAt).length;
 
-  const visibleRows = rows.filter((r) => {
-    if (showOnlyUncategorized && (r.isTransfer || isFullyCategorized(r))) return false;
-    if (showOnlyUnassignedBook && r.bookId) return false;
-    if (showOnlyUnreviewed && !(r.categorySource === "auto" && !r.reviewedAt)) return false;
-    return true;
-  });
+  function isRowResolved(r: TransactionRowData): boolean {
+    return r.isTransfer || isFullyCategorized(r);
+  }
+
+  // Reviewing a single import (arrived via the review-queue link, see
+  // import/review-queue-actions.ts): `rows` is already scoped to exactly
+  // that import's transactions by the importId filter, so its own
+  // progress can be read straight off local state — no separate fetch.
+  const isReviewingImport = !!filters.importId && !!importContext;
+  const importTotal = rows.length;
+  const importCategorized = rows.filter(isRowResolved).length;
+  const [justCompleted, setJustCompleted] = useState(false);
+  const wasAllDoneRef = useRef(false);
+  useEffect(() => {
+    if (!isReviewingImport) return;
+    const allDone = importTotal > 0 && importCategorized === importTotal;
+    if (allDone && !wasAllDoneRef.current) setJustCompleted(true);
+    wasAllDoneRef.current = allDone;
+  }, [isReviewingImport, importTotal, importCategorized]);
+
+  const visibleRows = rows
+    .filter((r) => {
+      if (showOnlyUncategorized && (r.isTransfer || isFullyCategorized(r))) return false;
+      if (showOnlyUnassignedBook && r.bookId) return false;
+      if (showOnlyUnreviewed && !(r.categorySource === "auto" && !r.reviewedAt)) return false;
+      return true;
+    })
+    .sort((a, b) => (isReviewingImport ? Number(isRowResolved(a)) - Number(isRowResolved(b)) : 0));
 
   // The `indeterminate` visual state has no JSX prop — it's DOM-property
   // only, so it has to be imperatively synced onto the checkbox element.
@@ -131,6 +171,7 @@ export function TransactionsView({
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
       recipient: filters.recipient,
+      importId: filters.importId,
     };
   }
 
@@ -305,9 +346,39 @@ export function TransactionsView({
   const columns = getColumns(showBookFeature);
 
   return (
-    <div className="shadow-soft overflow-hidden rounded-xl border border-border bg-surface">
-      <div className="border-b border-border">
-        <TransactionsToolbar
+    <div className="flex flex-col gap-3">
+      {isReviewingImport && importContext && (
+        <div
+          className={`shadow-soft flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors ${
+            justCompleted ? "border-mint bg-mint/10" : "border-border bg-surface"
+          }`}
+        >
+          {justCompleted ? (
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-mint text-white">
+                <CheckIcon className="h-3.5 w-3.5" />
+              </span>
+              <p className="text-[13.5px] font-medium text-foreground">All done — nice work!</p>
+            </div>
+          ) : (
+            <p className="text-[13px] text-muted">
+              <span className="font-medium text-foreground">Reviewing:</span> {importContext.accountName}
+              {importContext.bookName && ` · ${importContext.bookName}`}
+              {formatReviewPeriod(importContext.statementStartDate, importContext.statementEndDate) &&
+                ` · ${formatReviewPeriod(importContext.statementStartDate, importContext.statementEndDate)}`}
+              {" · "}
+              {importCategorized} of {importTotal} categorized
+            </p>
+          )}
+          <Link href="/import" className="shrink-0 text-[13px] font-medium text-violet-600 hover:underline">
+            {justCompleted ? "Back to imports" : "Done reviewing"}
+          </Link>
+        </div>
+      )}
+
+      <div className="shadow-soft overflow-hidden rounded-xl border border-border bg-surface">
+        <div className="border-b border-border">
+          <TransactionsToolbar
           accounts={accounts}
           books={books}
           categories={categories}
@@ -435,6 +506,7 @@ export function TransactionsView({
           )}
         </>
       )}
+      </div>
     </div>
   );
 }
