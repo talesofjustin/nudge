@@ -73,15 +73,26 @@ export function extractCounterpartyIban(raw: string | null | undefined): string 
 // Only the single best available reference is returned per transaction;
 // recurring.ts decides whether it actually repeats consistently enough to
 // trust for grouping.
-const RECURRING_REFERENCE_KEYS = ["polisnummer", "contractnummer", "factuurnummer", "machtiging id", "kenmerk"];
+const RECURRING_REFERENCE_KEYS = ["Polisnummer", "Contractnummer", "Factuurnummer", "Machtiging ID", "Kenmerk"];
 
+// Deliberately NOT built on parseRawDescription's field values: those run
+// until the *next recognized key*, which is too loose for a reference —
+// real exports glue trailing product text directly onto the number with
+// no delimiter (e.g. "Polisnummer: 25059217Auto-pakket Kenteken ...
+// PERIODE 01 -06-26 TOT 01-07-26 IBAN: ..."), and that PERIODE date range
+// is separated only by a space, not a recognized key, so it would end up
+// inside the "value" and change every month — silently breaking the very
+// month-to-month matching this reference exists for. A reference is a
+// single unbroken token, so only the first whitespace-delimited run after
+// the key is taken; whatever's glued to the number with no space (like
+// "Auto-pakket" here) comes along for free and is harmless since it's
+// equally stable, but the space before "Kenteken"/the date range stops
+// the capture before the actually-variable part.
 export function extractRecurringReference(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const fields = parseRawDescription(raw);
-  if (!fields) return null;
   for (const key of RECURRING_REFERENCE_KEYS) {
-    const match = fields.find((f) => f.label.toLowerCase() === key);
-    if (match && match.value.trim()) return match.value.trim();
+    const match = raw.match(new RegExp(`${key.replace(" ", "\\s+")}:\\s*(\\S+)`, "i"));
+    if (match?.[1]) return match[1];
   }
   return null;
 }
