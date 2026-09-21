@@ -14,6 +14,9 @@ const KNOWN_KEYS = [
   "Machtiging ID",
   "Incassant ID",
   "Valutadatum",
+  "Polisnummer",
+  "Contractnummer",
+  "Factuurnummer",
 ];
 
 // Case-insensitive: real exports aren't perfectly consistent about casing,
@@ -62,6 +65,25 @@ export function extractCounterpartyIban(raw: string | null | undefined): string 
   const fields = parseRawDescription(raw);
   const match = fields?.find((f) => f.label.toLowerCase() === "iban");
   return match ? match.value.trim() : null;
+}
+
+// Most-specific-first: a policy/contract/invoice number identifies one
+// specific recurring relationship (the whole point — see lib/recurring.ts),
+// while "Kenmerk" is a generic catch-all some banks reuse more loosely.
+// Only the single best available reference is returned per transaction;
+// recurring.ts decides whether it actually repeats consistently enough to
+// trust for grouping.
+const RECURRING_REFERENCE_KEYS = ["polisnummer", "contractnummer", "factuurnummer", "machtiging id", "kenmerk"];
+
+export function extractRecurringReference(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const fields = parseRawDescription(raw);
+  if (!fields) return null;
+  for (const key of RECURRING_REFERENCE_KEYS) {
+    const match = fields.find((f) => f.label.toLowerCase() === key);
+    if (match && match.value.trim()) return match.value.trim();
+  }
+  return null;
 }
 
 const DATUM_TIJD_PATTERN = /^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/;

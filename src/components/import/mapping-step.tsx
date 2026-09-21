@@ -223,6 +223,7 @@ export function MappingStep({
                 description: r.description,
                 counterpartyIban: r.counterpartyIban,
                 hasPreciseTime: r.hasPreciseTime,
+                recurringReference: r.recurringReference,
               })),
               skippedCount,
               decimalSeparator,

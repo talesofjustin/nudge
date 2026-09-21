@@ -1,5 +1,5 @@
 import type { DecimalSeparator } from "@/lib/supabase/database.types";
-import { extractCounterpartyIban, extractTransactionTime } from "@/lib/parse-raw-description";
+import { extractCounterpartyIban, extractTransactionTime, extractRecurringReference } from "@/lib/parse-raw-description";
 import { normalizeIban } from "@/lib/counterparty-identity";
 
 export type ParsedRow = Record<string, string>;
@@ -213,6 +213,7 @@ export type MappedRow = {
   description: string | null;
   counterpartyIban: string | null;
   hasPreciseTime: boolean;
+  recurringReference: string | null;
   valid: boolean;
 };
 
@@ -251,6 +252,8 @@ export function mapRows(
       hasPreciseTime = true;
     }
 
+    const recurringReference = extractRecurringReference(description);
+
     return {
       raw,
       date,
@@ -259,6 +262,7 @@ export function mapRows(
       description,
       counterpartyIban,
       hasPreciseTime,
+      recurringReference,
       valid: date !== null && amount !== null,
     };
   });

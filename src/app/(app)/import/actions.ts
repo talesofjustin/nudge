@@ -14,6 +14,7 @@ export type ImportRow = {
   description: string | null;
   counterpartyIban: string | null;
   hasPreciseTime: boolean;
+  recurringReference: string | null;
 };
 
 export type ImportAccountOption = {
@@ -237,6 +238,7 @@ export async function importTransactions(
         raw_description: row.description,
         occurred_at: row.date,
         has_precise_time: row.hasPreciseTime,
+        recurring_reference: row.recurringReference,
         is_recurring: false,
       };
     }),

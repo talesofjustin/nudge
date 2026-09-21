@@ -12,8 +12,14 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function formatImportedAt(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+// The transaction's own date/time — the field duplicates are actually
+// matched on — not when it was imported into the app, which answers the
+// wrong question and is what made it unclear why two rows were flagged.
+function formatMatchedDateTime(occurredAt: string, hasPreciseTime: boolean): string {
+  const date = new Date(occurredAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  if (!hasPreciseTime) return date;
+  const time = new Date(occurredAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `${date}, ${time}`;
 }
 
 export function DuplicateReview({
@@ -86,7 +92,9 @@ export function DuplicateReview({
                 .map((tx, i) => (
                   <label
                     key={tx.id}
-                    className="flex items-start gap-2.5 rounded-xl px-2 py-2 hover:bg-canvas"
+                    className={`flex items-start gap-2.5 rounded-xl px-2 py-2 transition-opacity hover:bg-canvas ${
+                      keptIds.has(tx.id) ? "" : "opacity-40"
+                    }`}
                   >
                     <input
                       type="checkbox"
@@ -112,8 +120,9 @@ export function DuplicateReview({
                       {tx.rawDescription && tx.rawDescription !== tx.description && (
                         <p className="mt-0.5 truncate text-[11px] text-muted-2">{tx.rawDescription}</p>
                       )}
-                      {/* Least useful field for judging a real duplicate — demoted to quiet subtext. */}
-                      <p className="mt-0.5 text-[10.5px] text-muted-2">imported {formatImportedAt(tx.createdAt)}</p>
+                      <p className="mt-0.5 text-[10.5px] text-muted-2">
+                        {formatMatchedDateTime(tx.occurredAt, tx.hasPreciseTime)}
+                      </p>
                     </div>
                   </label>
                 ))}
@@ -136,7 +145,7 @@ export function DuplicateReview({
             )
           }
         >
-          {deleting ? "Deleting…" : `Delete ${totalToDelete} duplicate${totalToDelete === 1 ? "" : "s"}`}
+          {deleting ? "Deleting…" : `Keep selected · Delete ${totalToDelete}`}
         </Button>
       </div>
     </div>

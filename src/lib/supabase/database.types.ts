@@ -20,8 +20,9 @@
 // 20260720134316_add_recurring_groups.sql,
 // 20260720155442_add_recurring_group_status.sql,
 // 20260721081720_remove_cash_account_type.sql,
-// 20260721081721_add_category_sort_order.sql, and
-// 20260723091220_reset_recurring_groups_for_amount_clustering.sql. Shaped
+// 20260721081721_add_category_sort_order.sql,
+// 20260723091220_reset_recurring_groups_for_amount_clustering.sql, and
+// 20260921170520_add_recurring_reference.sql. Shaped
 // the way `supabase gen types typescript` would produce it, so running that command
 // later (once the migrations have been applied) is a drop-in replacement for
 // this file. `Relationships` is left empty here (no typed nested-select
@@ -152,6 +153,7 @@ export type Database = {
           reviewed_at: string | null;
           is_recurring: boolean;
           recurring_group_id: string | null;
+          recurring_reference: string | null;
           created_at: string;
         };
         Insert: {
@@ -171,6 +173,7 @@ export type Database = {
           reviewed_at?: string | null;
           is_recurring?: boolean;
           recurring_group_id?: string | null;
+          recurring_reference?: string | null;
           created_at?: string;
         };
         Update: {
@@ -190,6 +193,7 @@ export type Database = {
           reviewed_at?: string | null;
           is_recurring?: boolean;
           recurring_group_id?: string | null;
+          recurring_reference?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -203,6 +207,7 @@ export type Database = {
           interval_days: number;
           typical_amount: number;
           status: RecurringGroupStatus;
+          reference: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -214,6 +219,7 @@ export type Database = {
           interval_days: number;
           typical_amount: number;
           status?: RecurringGroupStatus;
+          reference?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -225,6 +231,7 @@ export type Database = {
           interval_days?: number;
           typical_amount?: number;
           status?: RecurringGroupStatus;
+          reference?: string | null;
           created_at?: string;
           updated_at?: string;
         };

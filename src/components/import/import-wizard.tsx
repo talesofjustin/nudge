@@ -121,6 +121,7 @@ export function ImportWizard({
               description: r.description,
               counterpartyIban: r.counterpartyIban,
               hasPreciseTime: r.hasPreciseTime,
+              recurringReference: r.recurringReference,
             })),
           );
           setPendingSkippedCount(mapped.length - validRows.length);

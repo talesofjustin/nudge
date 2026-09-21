@@ -390,6 +390,7 @@ export function ReviewStep({
                 description: r.description,
                 counterpartyIban: r.counterpartyIban,
                 hasPreciseTime: r.hasPreciseTime,
+                recurringReference: r.recurringReference,
               })),
               bookOverrides,
             )
