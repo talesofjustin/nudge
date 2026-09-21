@@ -39,7 +39,7 @@ export function ProfilePanel({ profile }: { profile: ProfileData }) {
           }}
           className="max-w-xs"
         />
-        <Button type="button" variant="secondary" onClick={handleSave} disabled={saving} className="h-9 px-4 text-[13px]">
+        <Button type="button" variant="secondary" size="sm" onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </Button>
         {saved && <span className="text-[13px] text-mint">Saved.</span>}

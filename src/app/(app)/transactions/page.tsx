@@ -5,6 +5,7 @@ import { parseFiltersFromParams, type SearchParamsInput } from "@/lib/transactio
 import { getFilteredTransactions } from "@/app/(app)/transactions/actions";
 import { TransactionsView } from "@/components/transactions/transactions-view";
 import { ReactiveBookSuggestion } from "@/components/transactions/reactive-book-suggestion";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function TransactionsPage({
   searchParams,
@@ -53,12 +54,7 @@ export default async function TransactionsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="pl-6">
-        <h1 className="text-[22px] font-semibold text-ink">Transactions</h1>
-        <p className="mt-1 text-[15px] text-muted">
-          All your imported transactions, most recent first.
-        </p>
-      </div>
+      <PageHeader title="Transactions" subtitle="All your imported transactions, most recent first." />
 
       {showBookSuggestion && <ReactiveBookSuggestion />}
 

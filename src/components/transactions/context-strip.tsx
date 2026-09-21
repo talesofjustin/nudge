@@ -124,7 +124,16 @@ export function ContextStrip({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 bg-canvas px-4 py-2.5">
+      {/* Sticky only while a selection is active — that's the moment Delete
+          / Mark as reviewed need to stay reachable without scrolling back
+          up. The table header's own sticky offset (transactions-view.tsx)
+          shifts down to match this row's height (h-11) so the two don't
+          overlap once both are pinned to the viewport top. */}
+      <div
+        className={`flex h-11 items-center justify-between gap-3 bg-canvas px-4 ${
+          selectedCount > 0 ? "sticky top-0 z-20 border-b border-border" : ""
+        }`}
+      >
         <span className="text-[12.5px] text-muted">
           {formatRangeLabel(dateFrom, dateTo)} · {count} transaction{count === 1 ? "" : "s"}
         </span>

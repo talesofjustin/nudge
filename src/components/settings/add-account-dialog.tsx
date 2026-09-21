@@ -133,10 +133,10 @@ export function AddAccountDialog({
         )}
 
         <div className="flex items-center justify-end gap-3 pt-1">
-          <Button variant="ghost" type="button" onClick={handleClose}>
+          <Button variant="ghost" type="button" size="sm" onClick={handleClose}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={submitting}>
+          <Button type="button" size="sm" onClick={handleSubmit} disabled={submitting}>
             {submitting ? "Adding…" : "Add account"}
           </Button>
         </div>

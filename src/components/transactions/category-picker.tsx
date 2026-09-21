@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FilterChip } from "@/components/ui/pill";
@@ -122,8 +123,8 @@ export function CategoryPicker({
       }}
     >
       <PopoverTrigger asChild>
-        <button type="button" className="cursor-pointer rounded-full transition-opacity hover:opacity-80">
-          <CategoryBadge category={current} emptyLabel={emptyLabel} unreviewed={unreviewed} />
+        <button type="button" className="max-w-full cursor-pointer rounded-full transition-opacity hover:opacity-80">
+          <CategoryBadge category={current} emptyLabel={emptyLabel} unreviewed={unreviewed} className="max-w-full" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-80">
@@ -157,14 +158,15 @@ export function CategoryPicker({
                     <CategoryBadge category={c} className="max-w-full" />
                   </button>
                   {onUpdateCategory && (
-                    <button
-                      type="button"
-                      onClick={() => startEdit(c)}
-                      title={`Edit ${c.name}`}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-2 opacity-0 transition-opacity hover:bg-surface hover:text-foreground group-hover:opacity-100"
-                    >
-                      <PencilIcon className="h-3 w-3" />
-                    </button>
+                    <Tooltip content={`Edit ${c.name}`}>
+                      <button
+                        type="button"
+                        onClick={() => startEdit(c)}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-2 opacity-0 transition-opacity hover:bg-surface hover:text-foreground group-hover:opacity-100"
+                      >
+                        <PencilIcon className="h-3 w-3" />
+                      </button>
+                    </Tooltip>
                   )}
                 </div>
               ))}
@@ -263,18 +265,14 @@ export function CategoryPicker({
             )}
 
             <div className="flex items-center justify-between pt-1">
-              <button
-                type="button"
-                onClick={() => setMode({ view: "list" })}
-                className="text-[13px] font-medium text-muted hover:text-foreground"
-              >
+              <Button type="button" variant="ghost" size="sm" onClick={() => setMode({ view: "list" })}>
                 Back
-              </button>
+              </Button>
               <Button
                 type="button"
+                size="sm"
                 onClick={mode.view === "create" ? handleCreate : handleSaveEdit}
                 disabled={submitting}
-                className="h-9 px-4 text-[13px]"
               >
                 {submitting ? (mode.view === "create" ? "Creating…" : "Saving…") : mode.view === "create" ? "Create" : "Save"}
               </Button>

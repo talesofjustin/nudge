@@ -8,6 +8,7 @@ import {
 } from "@/lib/budget-filters";
 import { getBudgetProgress } from "@/app/(app)/budget/actions";
 import { BudgetView } from "@/components/budget/budget-view";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function BudgetPage({
   searchParams,
@@ -44,12 +45,7 @@ export default async function BudgetPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="pl-6">
-        <h1 className="text-[22px] font-semibold text-ink">Budget</h1>
-        <p className="mt-1 text-[15px] text-muted">
-          Plan and track spending against your categories, month by month.
-        </p>
-      </div>
+      <PageHeader title="Budget" subtitle="Plan and track spending against your categories, month by month." />
 
       <BudgetView
         categories={categories ?? []}

@@ -121,7 +121,8 @@ function NamePopover({ name, onSave }: { name: string; onSave: (name: string) =>
         <Input label="Name" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
         <Button
           type="button"
-          className="mt-3 h-8 w-full text-[13px]"
+          size="sm"
+          className="mt-3 w-full"
           onClick={() => {
             if (value.trim()) onSave(value.trim());
             setOpen(false);
@@ -195,51 +196,69 @@ function CategoryRow({
   );
 }
 
+// Mirrors CategoryRow's exact structure (same slot widths/order: grip,
+// color, icon, name, kind toggle, delete) so the row that appears when
+// adding a category sits in the identical layout as one that already
+// exists — no shift once it's committed and re-renders as a real row. No
+// Add/Cancel chrome: the name field is live and editable the instant this
+// row mounts, Enter or blur commits it, and the trash icon in the delete
+// slot discards the draft — the same "undo a mistake" affordance an
+// already-created row gets via its own delete button.
 function NewCategoryRow({
   onCreate,
-  onCancel,
+  onDiscard,
 }: {
   onCreate: (name: string, color: string, icon: string, kind: CategoryKind) => Promise<void>;
-  onCancel: () => void;
+  onDiscard: () => void;
 }) {
   const [name, setName] = useState("");
   const [color, setColor] = useState(CATEGORY_COLOR_SWATCHES[0]);
   const [icon, setIcon] = useState(Object.keys(CATEGORY_ICONS)[0]);
   const [kind, setKind] = useState<CategoryKind>("spending");
-  const [submitting, setSubmitting] = useState(false);
+  const [committing, setCommitting] = useState(false);
 
   async function commit() {
-    if (!name.trim() || submitting) return;
-    setSubmitting(true);
-    await onCreate(name.trim(), color, icon, kind);
-    setSubmitting(false);
+    const trimmed = name.trim();
+    if (committing) return;
+    if (!trimmed) {
+      onDiscard();
+      return;
+    }
+    setCommitting(true);
+    await onCreate(trimmed, color, icon, kind);
+    // No need to reset `committing` — this row unmounts once the caller
+    // appends the real category and clears the draft.
   }
 
   return (
     <div className="flex items-center gap-3 rounded-xl bg-canvas px-2 py-2">
-      <span className="w-4 shrink-0" />
+      <span className="flex h-5 w-4 shrink-0 items-center justify-center" />
       <ColorPopover color={color} onChange={setColor} />
       <IconPopover icon={icon} onChange={setIcon} />
-      <Input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void commit();
-          if (e.key === "Escape") onCancel();
-        }}
-        placeholder="Category name"
-        autoFocus
-        className="h-8 min-w-0 flex-1"
-      />
-      <KindToggle kind={kind} onChange={setKind} />
-      <div className="flex shrink-0 items-center gap-2">
-        <button type="button" onClick={onCancel} className="text-[12px] font-medium text-muted hover:text-foreground">
-          Cancel
-        </button>
-        <Button type="button" className="h-7 px-3 text-[12px]" disabled={!name.trim() || submitting} onClick={commit}>
-          {submitting ? "Adding…" : "Add"}
-        </Button>
+      <div className="min-w-0 flex-1">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") onDiscard();
+          }}
+          placeholder="Category name"
+          autoFocus
+          disabled={committing}
+          className="h-8 w-full"
+        />
       </div>
+      <KindToggle kind={kind} onChange={setKind} />
+      <button
+        type="button"
+        onClick={onDiscard}
+        disabled={committing}
+        className="text-[12.5px] font-medium text-muted-2 hover:text-danger disabled:opacity-50"
+      >
+        Delete
+      </button>
     </div>
   );
 }
@@ -295,19 +314,14 @@ export function CategoriesManager({ categories: initial }: { categories: Categor
           </p>
         </div>
         {!creating && (
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setCreating(true)}
-            className="h-9 shrink-0 px-4 text-[13.5px]"
-          >
+          <Button type="button" variant="secondary" size="sm" onClick={() => setCreating(true)} className="shrink-0">
             New category
           </Button>
         )}
       </div>
 
       <div className="flex flex-col gap-0.5">
-        {creating && <NewCategoryRow onCreate={handleCreate} onCancel={() => setCreating(false)} />}
+        {creating && <NewCategoryRow onCreate={handleCreate} onDiscard={() => setCreating(false)} />}
 
         {categories.length === 0 && !creating ? (
           <p className="text-[13px] text-muted-2">No categories yet.</p>

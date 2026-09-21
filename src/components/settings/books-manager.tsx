@@ -31,7 +31,8 @@ function RenamePopover({ name, onSave }: { name: string; onSave: (name: string) 
         <Input label="Book name" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
         <Button
           type="button"
-          className="mt-3 h-8 w-full text-[13px]"
+          size="sm"
+          className="mt-3 w-full"
           onClick={() => {
             if (value.trim()) onSave(value.trim());
             setOpen(false);
@@ -63,12 +64,7 @@ export function BooksManager({ books }: { books: BookData[] }) {
             people only need one.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => setDialogOpen(true)}
-          className="h-9 shrink-0 px-4 text-[13.5px]"
-        >
+        <Button type="button" variant="secondary" size="sm" onClick={() => setDialogOpen(true)} className="shrink-0">
           New book
         </Button>
       </div>

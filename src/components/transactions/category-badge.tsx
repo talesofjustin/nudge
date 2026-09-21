@@ -34,7 +34,8 @@ export function CategoryBadge({
 
   return (
     <span
-      className={`inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium ${
+      title={category.name}
+      className={`inline-flex h-7 max-w-full items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium ${
         unreviewed ? "border border-dashed opacity-70" : ""
       } ${className}`}
       style={{
@@ -43,8 +44,8 @@ export function CategoryBadge({
         ...(unreviewed && { borderColor: textColor }),
       }}
     >
-      <Icon className="h-3.5 w-3.5" />
-      {category.name}
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 truncate">{category.name}</span>
     </span>
   );
 }

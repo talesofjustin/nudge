@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -40,19 +41,20 @@ function SecondaryFilterChip({
 }) {
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          title={label}
-          className={`inline-flex h-7 max-w-48 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition-colors ${
-            active
-              ? "border-violet-400 bg-violet-50 text-violet-600"
-              : "border-border text-muted hover:border-muted-2 hover:text-foreground"
-          }`}
-        >
-          <span className="truncate">{label}</span>
-        </button>
-      </PopoverTrigger>
+      <Tooltip content={label}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={`inline-flex h-7 max-w-48 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition-colors ${
+              active
+                ? "border-violet-400 bg-violet-50 text-violet-600"
+                : "border-border text-muted hover:border-muted-2 hover:text-foreground"
+            }`}
+          >
+            <span className="truncate">{label}</span>
+          </button>
+        </PopoverTrigger>
+      </Tooltip>
       <PopoverContent className="w-52" align="start">
         {children}
       </PopoverContent>

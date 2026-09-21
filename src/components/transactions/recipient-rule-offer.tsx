@@ -20,10 +20,10 @@ export function RecipientRuleOffer({
     <div className="flex w-64 flex-col gap-3">
       <p className="text-[13px] text-foreground">{message}</p>
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" type="button" className="h-8 px-3 text-[12.5px]" onClick={onDismiss}>
+        <Button variant="ghost" type="button" size="sm" onClick={onDismiss}>
           No thanks
         </Button>
-        <Button type="button" className="h-8 px-3 text-[12.5px]" onClick={onConfirm}>
+        <Button type="button" size="sm" onClick={onConfirm}>
           Yes, always
         </Button>
       </div>

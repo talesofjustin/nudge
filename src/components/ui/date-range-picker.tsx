@@ -136,12 +136,12 @@ export function DateRangePicker({
         </div>
 
         <div className="mt-3 flex items-center justify-end gap-2 border-t border-border pt-3">
-          <Button variant="ghost" type="button" className="h-8 px-3 text-[13px]" onClick={() => setOpen(false)}>
+          <Button variant="ghost" type="button" size="sm" onClick={() => setOpen(false)}>
             Cancel
           </Button>
           <Button
             type="button"
-            className="h-8 px-3 text-[13px]"
+            size="sm"
             disabled={!pendingStart || !pendingEnd}
             onClick={handleApply}
           >

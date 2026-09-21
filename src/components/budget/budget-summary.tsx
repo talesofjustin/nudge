@@ -1,3 +1,5 @@
+import { Stat, StatRow } from "@/components/ui/stat-row";
+
 export function BudgetSummary({
   totalBudgeted,
   totalSpent,
@@ -21,35 +23,31 @@ export function BudgetSummary({
 
   return (
     <div className="border-b border-border px-4 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[15px] text-foreground">
-          Spent <span className="font-semibold tabular-nums">€{totalSpent.toFixed(2)}</span> of €
-          {totalBudgeted.toFixed(2)} budgeted
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <StatRow>
+          <Stat label="Spent" value={`€${totalSpent.toFixed(2)}`} />
+          <Stat label="Budgeted" value={`€${totalBudgeted.toFixed(2)}`} />
+          <Stat
+            label={remaining >= 0 ? "Remaining" : "Over budget"}
+            value={`€${Math.abs(remaining).toFixed(2)}`}
+            tone={remaining >= 0 ? "mint" : "coral"}
+          />
           {totalSavingTarget > 0 && (
-            <>
-              {" "}
-              · Saved{" "}
-              <span className="font-semibold tabular-nums text-mint">€{totalSaved.toFixed(2)}</span> of €
-              {totalSavingTarget.toFixed(2)} target
-            </>
+            <Stat label="Saved" value={`€${totalSaved.toFixed(2)} / €${totalSavingTarget.toFixed(2)}`} tone="mint" />
           )}
-        </p>
+        </StatRow>
 
         {isCurrentMonth && (
-          <p className="text-[13px] text-muted">
+          <p className="shrink-0 text-[13px] text-muted">
             Day {dayOfMonth} of {totalDays}
           </p>
         )}
       </div>
 
-      <p className={`mt-1.5 text-[13px] font-medium ${remaining >= 0 ? "text-mint" : "text-coral"}`}>
-        {remaining >= 0 ? `€${remaining.toFixed(2)} remaining` : `€${Math.abs(remaining).toFixed(2)} over budget`}
-      </p>
-
       {/* Only surfaces once book-scoping is actually in effect (>1 book) —
           otherwise there's no book for a transaction to be missing. */}
       {!!unassignedCount && unassignedCount > 0 && (
-        <p className="mt-2 text-[12.5px] text-muted-2">
+        <p className="mt-3 text-[12.5px] text-muted-2">
           {unassignedCount} transaction{unassignedCount === 1 ? "" : "s"} need a book and{" "}
           {unassignedCount === 1 ? "isn't" : "aren't"} included above.
         </p>

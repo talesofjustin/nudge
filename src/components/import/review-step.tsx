@@ -243,14 +243,14 @@ export function ReviewStep({
                             <Button
                               type="button"
                               variant="secondary"
-                              className="h-7 px-2.5 text-[12px]"
+                              size="sm"
                               onClick={() => handleTransferItemAction(flag, item, "count")}
                             >
                               Yes, count them normally
                             </Button>
                             <Button
                               type="button"
-                              className="h-7 px-2.5 text-[12px]"
+                              size="sm"
                               onClick={() => handleTransferItemAction(flag, item, "exclude")}
                             >
                               No, exclude them
@@ -269,7 +269,7 @@ export function ReviewStep({
                         key={action.id}
                         type="button"
                         variant={action.variant ?? "secondary"}
-                        className="h-8 px-3 text-[13px]"
+                        size="sm"
                         onClick={() => handleFlagAction(flag, action.id)}
                       >
                         {action.label}
@@ -449,7 +449,7 @@ function BookAssignmentRow({
       </label>
       <Button
         type="button"
-        className="h-7 px-2.5 text-[12px]"
+        size="sm"
         disabled={!bookId}
         onClick={() => onResolve(bookId, remember)}
       >

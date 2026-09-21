@@ -98,13 +98,13 @@ export function RecurringRow({
                 <Button
                   variant="secondary"
                   type="button"
-                  className="h-7 px-2.5 text-[12px]"
+                  size="sm"
                   disabled={working}
                   onClick={handleDismiss}
                 >
                   Not recurring
                 </Button>
-                <Button type="button" className="h-7 px-2.5 text-[12px]" disabled={working} onClick={handleConfirm}>
+                <Button type="button" size="sm" disabled={working} onClick={handleConfirm}>
                   Confirm
                 </Button>
               </>

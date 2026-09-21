@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { CategoryPicker } from "@/components/transactions/category-picker";
 import { BookPicker, type BookInfo } from "@/components/transactions/book-picker";
@@ -201,14 +202,15 @@ export function TransactionRow({
         </td>
         <td className="truncate px-3 align-middle text-[13px] font-medium text-foreground">
           {row.recipient ? (
-            <button
-              type="button"
-              onClick={() => onFilterByRecipient(row.recipient!)}
-              className="max-w-full truncate rounded-lg px-1 py-1 text-left hover:underline"
-              title={`Filter by ${row.recipient}`}
-            >
-              {row.recipient}
-            </button>
+            <Tooltip content={`Filter by ${row.recipient}`}>
+              <button
+                type="button"
+                onClick={() => onFilterByRecipient(row.recipient!)}
+                className="max-w-full truncate rounded-lg px-1 py-1 text-left hover:underline"
+              >
+                {row.recipient}
+              </button>
+            </Tooltip>
           ) : (
             <span className="text-muted-2">—</span>
           )}
@@ -243,24 +245,27 @@ export function TransactionRow({
                 )}
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              title="Show details"
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-2 opacity-0 transition-colors group-hover:opacity-100 hover:bg-canvas hover:text-foreground ${
-                expanded ? "rotate-90 opacity-100" : ""
-              }`}
-            >
-              <ChevronRightIcon className="h-3.5 w-3.5" />
-            </button>
+            <Tooltip content="Show details">
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-2 opacity-0 transition-colors group-hover:opacity-100 hover:bg-canvas hover:text-foreground ${
+                  expanded ? "rotate-90 opacity-100" : ""
+                }`}
+              >
+                <ChevronRightIcon className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
           </div>
         </td>
         <td className="truncate px-3 text-right align-middle text-[13px] font-semibold tabular-nums">
           <span className="inline-flex items-center gap-1">
             {row.isTransfer && (
-              <span title="Transfer between your own accounts — not counted as income or expense.">
-                <TransferIcon className="h-3 w-3 shrink-0 text-violet-600" aria-label="Transfer" />
-              </span>
+              <Tooltip content="Transfer between your own accounts — not counted as income or expense.">
+                <span>
+                  <TransferIcon className="h-3 w-3 shrink-0 text-violet-600" aria-label="Transfer" />
+                </span>
+              </Tooltip>
             )}
             <span className={row.amount > 0 ? "text-mint" : "text-foreground"}>
               {row.amount > 0 ? "+" : "-"}€{Math.abs(row.amount).toFixed(2)}
@@ -269,12 +274,9 @@ export function TransactionRow({
         </td>
         <td className="truncate px-3 align-middle">
           {row.isTransfer ? (
-            <span
-              className="text-[13px] text-muted-2"
-              title="Transfers aren't income or expense, so they can't be categorised. Remove this recipient from your own accounts to categorise it."
-            >
-              —
-            </span>
+            <Tooltip content="Transfers aren't income or expense, so they can't be categorised. Remove this recipient from your own accounts to categorise it.">
+              <span className="text-[13px] text-muted-2">—</span>
+            </Tooltip>
           ) : (
             <CategoryPicker
               categories={categories}
@@ -314,25 +316,28 @@ export function TransactionRow({
         )}
         <td className="truncate px-3 align-middle text-[13px] text-muted">{accountName}</td>
         <td className="px-3 text-center align-middle">
-          <button
-            type="button"
-            onClick={() => onUpdate(row.id, { isRecurring: !row.isRecurring })}
-            aria-pressed={row.isRecurring}
-            title={
+          <Tooltip
+            content={
               row.isRecurringOutlier && row.recurringTypicalAmount !== null
                 ? `Recurring, but unusual amount — typically €${Math.abs(row.recurringTypicalAmount).toFixed(2)}`
                 : "Recurring"
             }
-            className={`inline-flex items-center justify-center transition-opacity ${
-              row.isRecurring
-                ? row.isRecurringOutlier
-                  ? "text-amber opacity-100"
-                  : "text-violet-600 opacity-100"
-                : "text-muted-2 opacity-40 hover:opacity-70"
-            }`}
           >
-            <RefreshIcon className="h-4 w-4" />
-          </button>
+            <button
+              type="button"
+              onClick={() => onUpdate(row.id, { isRecurring: !row.isRecurring })}
+              aria-pressed={row.isRecurring}
+              className={`inline-flex items-center justify-center transition-opacity ${
+                row.isRecurring
+                  ? row.isRecurringOutlier
+                    ? "text-amber opacity-100"
+                    : "text-violet-600 opacity-100"
+                  : "text-muted-2 opacity-40 hover:opacity-70"
+              }`}
+            >
+              <RefreshIcon className="h-4 w-4" />
+            </button>
+          </Tooltip>
         </td>
       </tr>
       {expanded && (

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getRecurringItems } from "@/app/(app)/recurring/actions";
 import { RecurringView } from "@/components/recurring/recurring-view";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function RecurringPage() {
   const supabase = await createClient();
@@ -13,12 +14,7 @@ export default async function RecurringPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="pl-6">
-        <h1 className="text-[22px] font-semibold text-ink">Recurring</h1>
-        <p className="mt-1 text-[15px] text-muted">
-          Subscriptions and regular charges detected from your transactions.
-        </p>
-      </div>
+      <PageHeader title="Recurring" subtitle="Subscriptions and regular charges detected from your transactions." />
 
       <RecurringView items={items} categories={categories ?? []} accounts={accounts ?? []} />
     </div>

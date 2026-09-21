@@ -151,7 +151,7 @@ export function BudgetEditSection({
             <Button
               variant="secondary"
               type="button"
-              className="h-8 px-3 text-[13px]"
+              size="sm"
               onClick={handleCopyLastMonth}
               disabled={copying}
             >

@@ -49,7 +49,8 @@ function RenamePopover({ name, onSave }: { name: string; onSave: (name: string) 
         />
         <Button
           type="button"
-          className="mt-3 h-8 w-full text-[13px]"
+          size="sm"
+          className="mt-3 w-full"
           onClick={() => {
             if (value.trim()) onSave(value.trim());
             setOpen(false);
@@ -162,7 +163,7 @@ export function AccountsManager({
             Bank accounts, cards, and other places your money lives.
           </p>
         </div>
-        <Button type="button" onClick={() => setDialogOpen(true)} className="h-9 px-4 text-[13.5px]">
+        <Button type="button" size="sm" onClick={() => setDialogOpen(true)}>
           Add account
         </Button>
       </div>

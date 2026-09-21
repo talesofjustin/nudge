@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { Tooltip } from "@/components/ui/tooltip";
 
 // The inline "Delete → are you sure? Cancel/Confirm" pattern used across
 // Transactions, Accounts, Books, Categories, and Rules — extracted once so
@@ -19,7 +20,7 @@ export function ConfirmDeleteButton({
   label?: string;
   confirmMessage?: string;
   confirmLabel?: string;
-  // Renders an icon-only trigger (title=label) when set without
+  // Renders an icon-only trigger (tooltipped with label) when set without
   // showLabelWithIcon; set both to show the icon next to visible text.
   icon?: ReactNode;
   showLabelWithIcon?: boolean;
@@ -74,14 +75,15 @@ export function ConfirmDeleteButton({
 
   if (icon) {
     return (
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        title={label}
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-2 transition-colors hover:bg-canvas hover:text-danger ${className}`}
-      >
-        {icon}
-      </button>
+      <Tooltip content={label}>
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-2 transition-colors hover:bg-canvas hover:text-danger ${className}`}
+        >
+          {icon}
+        </button>
+      </Tooltip>
     );
   }
 

@@ -27,25 +27,27 @@ export function DuplicateReview({
   onClose: () => void;
   onConfirmDelete: (ids: string[]) => void;
 }) {
-  // Newest copy of each group pre-selected for deletion; the original
-  // (earliest) stays kept — the user can override any of it.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
+  // The checkbox means "keep this one" — the original (earliest copy) of
+  // each group is pre-checked, everything else is what gets deleted by
+  // default. Checked = survives; unchecked = deleted. This is the
+  // opposite of pre-checking what gets destroyed, which reads backwards.
+  const [keptIds, setKeptIds] = useState<Set<string>>(() => {
     const set = new Set<string>();
     for (const g of groups) {
-      const newest = [...g.transactions].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-      if (newest) set.add(newest.id);
+      const original = [...g.transactions].sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+      if (original) set.add(original.id);
     }
     return set;
   });
 
-  const totalSelected = selectedIds.size;
   const totalDuplicates = useMemo(
     () => groups.reduce((sum, g) => sum + g.transactions.length, 0),
     [groups],
   );
+  const totalToDelete = totalDuplicates - keptIds.size;
 
   function toggle(id: string) {
-    setSelectedIds((prev) => {
+    setKeptIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -67,6 +69,10 @@ export function DuplicateReview({
         </button>
       </div>
 
+      <div className="flex items-center gap-2.5 border-b border-border bg-canvas px-4 py-1.5 pl-[27px] text-[11px] font-medium tracking-wide text-muted-2 uppercase">
+        Keep
+      </div>
+
       <div className="flex max-h-[560px] flex-col divide-y divide-border overflow-y-auto themed-scrollbar">
         {groups.map((g) => (
           <div key={g.key} className="px-4 py-3">
@@ -84,7 +90,7 @@ export function DuplicateReview({
                   >
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(tx.id)}
+                      checked={keptIds.has(tx.id)}
                       onChange={() => toggle(tx.id)}
                       className="mt-1 h-3.5 w-3.5 shrink-0 rounded border-border accent-[var(--violet-600)]"
                     />
@@ -117,16 +123,20 @@ export function DuplicateReview({
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
-        <Button variant="secondary" type="button" className="h-8 px-3 text-[13px]" onClick={onClose} disabled={deleting}>
+        <Button variant="secondary" type="button" size="sm" onClick={onClose} disabled={deleting}>
           Cancel
         </Button>
         <Button
           type="button"
-          className="h-8 px-3 text-[13px]"
-          disabled={totalSelected === 0 || deleting}
-          onClick={() => onConfirmDelete(Array.from(selectedIds))}
+          size="sm"
+          disabled={totalToDelete === 0 || deleting}
+          onClick={() =>
+            onConfirmDelete(
+              groups.flatMap((g) => g.transactions.filter((t) => !keptIds.has(t.id)).map((t) => t.id)),
+            )
+          }
         >
-          {deleting ? "Deleting…" : `Delete ${totalSelected} selected`}
+          {deleting ? "Deleting…" : `Delete ${totalToDelete} duplicate${totalToDelete === 1 ? "" : "s"}`}
         </Button>
       </div>
     </div>

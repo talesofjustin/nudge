@@ -78,6 +78,7 @@ export function TransactionsView({
   const [reviewingDuplicates, setReviewingDuplicates] = useState(false);
   const [deletingDuplicates, setDeletingDuplicates] = useState(false);
   const isFirstRender = useRef(true);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   const showBookFeature = books.length > 1;
 
@@ -107,6 +108,14 @@ export function TransactionsView({
     if (showOnlyUnreviewed && !(r.categorySource === "auto" && !r.reviewedAt)) return false;
     return true;
   });
+
+  // The `indeterminate` visual state has no JSX prop — it's DOM-property
+  // only, so it has to be imperatively synced onto the checkbox element.
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = selectedIds.size > 0 && selectedIds.size < visibleRows.length;
+    }
+  }, [selectedIds, visibleRows.length]);
 
   function buildFilterParams() {
     const min = filters.amountMin.trim() ? Number(filters.amountMin) : null;
@@ -238,9 +247,13 @@ export function TransactionsView({
     });
   }
 
+  // A partial selection clears rather than filling in the rest — the
+  // indeterminate checkbox reads as "some selected", and clicking it should
+  // resolve that ambiguity by starting over, not by silently selecting
+  // everything else.
   function toggleSelectAll() {
     setSelectedIds((prev) =>
-      prev.size === visibleRows.length ? new Set() : new Set(visibleRows.map((r) => r.id)),
+      prev.size === 0 ? new Set(visibleRows.map((r) => r.id)) : new Set(),
     );
   }
 
@@ -365,8 +378,13 @@ export function TransactionsView({
                 </colgroup>
                 <thead>
                   <tr className="bg-canvas">
-                    <th className="sticky top-0 z-10 border-b border-border bg-canvas px-3 py-2 text-center align-middle">
+                    <th
+                      className={`sticky z-10 border-b border-border bg-canvas px-3 py-2 text-center align-middle ${
+                        selectedIds.size > 0 ? "top-11" : "top-0"
+                      }`}
+                    >
                       <input
+                        ref={selectAllRef}
                         type="checkbox"
                         checked={visibleRows.length > 0 && selectedIds.size === visibleRows.length}
                         onChange={toggleSelectAll}
@@ -377,9 +395,9 @@ export function TransactionsView({
                     {columns.slice(1).map((col) => (
                       <th
                         key={col.label}
-                        className={`sticky top-0 z-10 truncate border-b border-border bg-canvas px-3 py-2 text-[11px] font-medium tracking-wide text-muted uppercase ${
-                          col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"
-                        }`}
+                        className={`sticky z-10 truncate border-b border-border bg-canvas px-3 py-2 text-[11px] font-medium tracking-wide text-muted uppercase ${
+                          selectedIds.size > 0 ? "top-11" : "top-0"
+                        } ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}`}
                       >
                         {col.label}
                       </th>

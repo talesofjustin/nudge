@@ -54,7 +54,8 @@ function QuickSetBudgetPopover({
         />
         <Button
           type="button"
-          className="mt-3 h-8 w-full text-[13px]"
+          size="sm"
+          className="mt-3 w-full"
           onClick={handleSave}
           disabled={saving}
         >
