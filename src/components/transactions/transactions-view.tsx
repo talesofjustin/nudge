@@ -23,6 +23,7 @@ import {
   type TransactionRowData,
   type DuplicateGroup,
 } from "@/app/(app)/transactions/actions";
+import type { TransactionSplitData } from "@/app/(app)/transactions/split-actions";
 import { filtersToSearchParams, type FiltersState } from "@/lib/transaction-filters";
 import type { CategoryKind } from "@/lib/supabase/database.types";
 
@@ -98,12 +99,24 @@ export function TransactionsView({
     })();
   }, []);
 
-  const uncategorizedCount = rows.filter((r) => !r.categoryId && !r.isTransfer).length;
+  // A split transaction's own categoryId stops being the source of truth
+  // once it has splits (see transactions/split-actions.ts) — counting and
+  // filtering both need to look at the split lines instead, and the count
+  // reflects individual lines still needing a category, not "1 per
+  // transaction", so it's an honest picture of what's left to resolve.
+  function isFullyCategorized(r: TransactionRowData): boolean {
+    return r.splits.length > 0 ? r.splits.every((s) => s.categoryId !== null) : r.categoryId !== null;
+  }
+  const uncategorizedCount = rows.reduce((sum, r) => {
+    if (r.isTransfer) return sum;
+    if (r.splits.length > 0) return sum + r.splits.filter((s) => s.categoryId === null).length;
+    return sum + (r.categoryId ? 0 : 1);
+  }, 0);
   const unassignedBookCount = showBookFeature ? rows.filter((r) => !r.bookId).length : 0;
   const unreviewedCount = rows.filter((r) => r.categorySource === "auto" && !r.reviewedAt).length;
 
   const visibleRows = rows.filter((r) => {
-    if (showOnlyUncategorized && (r.categoryId || r.isTransfer)) return false;
+    if (showOnlyUncategorized && (r.isTransfer || isFullyCategorized(r))) return false;
     if (showOnlyUnassignedBook && r.bookId) return false;
     if (showOnlyUnreviewed && !(r.categorySource === "auto" && !r.reviewedAt)) return false;
     return true;
@@ -236,6 +249,10 @@ export function TransactionsView({
   async function handleOfferCategoryRule(recipient: string, categoryId: string) {
     const row = rows.find((r) => r.recipient === recipient);
     await setRecipientCategoryRule(recipient, categoryId, row?.counterpartyIban ?? null);
+  }
+
+  function handleSplitsChanged(id: string, splits: TransactionSplitData[]) {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, splits } : r)));
   }
 
   function toggleSelect(id: string) {
@@ -425,6 +442,7 @@ export function TransactionsView({
                         onUpdateCategory={handleUpdateCategory}
                         onOfferBookRule={handleOfferBookRule}
                         onOfferCategoryRule={handleOfferCategoryRule}
+                        onSplitsChanged={handleSplitsChanged}
                       />
                     );
                   })}

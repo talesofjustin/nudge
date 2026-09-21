@@ -50,13 +50,18 @@ export async function getBudgetProgress(
 
   const monthKey = financialMonthBudgetKey(from);
 
-  let txQuery = supabase
+  // Not filtered by book_id at the query level: once a transaction has
+  // splits, an individual split's own book override can point at a
+  // *different* book than the parent's resolved one (see
+  // transaction_splits), so which book a given euro counts toward can
+  // only be resolved per split/transaction in JS below, not with a single
+  // column filter.
+  const txQuery = supabase
     .from("transactions")
-    .select("category_id, amount, recipient, counterparty_iban, book_id")
+    .select("id, category_id, amount, recipient, counterparty_iban, book_id")
     .eq("user_id", user.id)
     .gte("occurred_at", from)
     .lte("occurred_at", `${to}T23:59:59`);
-  if (bookId) txQuery = txQuery.eq("book_id", bookId);
 
   let budgetQuery = supabase
     .from("budgets")
@@ -72,19 +77,58 @@ export async function getBudgetProgress(
     supabase.from("categories").select("id, kind").eq("user_id", user.id),
   ]);
 
+  const txIds = (txs ?? []).map((t) => t.id);
+  const { data: splitRows } =
+    txIds.length > 0
+      ? await supabase.from("transaction_splits").select("transaction_id, category_id, book_id, amount").in("transaction_id", txIds)
+      : { data: [] };
+  const splitsByTx = new Map<string, { category_id: string | null; book_id: string | null; amount: number }[]>();
+  for (const s of splitRows ?? []) {
+    const list = splitsByTx.get(s.transaction_id) ?? [];
+    list.push(s);
+    splitsByTx.set(s.transaction_id, list);
+  }
+
   const ownAccountSet = buildOwnAccountSet(
     (known ?? []).map((r) => ({ recipient: r.recipient, counterpartyIban: r.counterparty_iban, isOwnAccount: r.is_own_account })),
   );
   const kindByCategory = new Map((categories ?? []).map((c) => [c.id, c.kind as CategoryKind]));
 
+  // Once a transaction has splits, its own category_id/amount stop being
+  // the source of truth for reporting — each split line is summed against
+  // its own (or, if unset, the parent's) category and book instead.
+  // Recurring detection, duplicate detection, and import are untouched:
+  // this expansion is local to reporting/spend calculations only.
   const spentByCategory = new Map<string, number>();
   let unassignedCount = 0;
   for (const tx of txs ?? []) {
-    if (bookId && !tx.book_id) unassignedCount++;
-    if (!tx.category_id) continue;
-    if (tx.amount >= 0) continue;
     if (isTransferRecipient({ recipient: tx.recipient, counterpartyIban: tx.counterparty_iban }, ownAccountSet)) continue;
-    spentByCategory.set(tx.category_id, (spentByCategory.get(tx.category_id) ?? 0) + Math.abs(tx.amount));
+    const splits = splitsByTx.get(tx.id);
+
+    if (splits && splits.length > 0) {
+      for (const split of splits) {
+        const resolvedBook = split.book_id ?? tx.book_id;
+        if (bookId) {
+          if (resolvedBook !== bookId) {
+            if (!resolvedBook) unassignedCount++;
+            continue;
+          }
+        }
+        if (!split.category_id) continue;
+        if (split.amount >= 0) continue;
+        spentByCategory.set(split.category_id, (spentByCategory.get(split.category_id) ?? 0) + Math.abs(split.amount));
+      }
+    } else {
+      if (bookId) {
+        if (tx.book_id !== bookId) {
+          if (!tx.book_id) unassignedCount++;
+          continue;
+        }
+      }
+      if (!tx.category_id) continue;
+      if (tx.amount >= 0) continue;
+      spentByCategory.set(tx.category_id, (spentByCategory.get(tx.category_id) ?? 0) + Math.abs(tx.amount));
+    }
   }
 
   const budgetByCategory = new Map<string, number>();

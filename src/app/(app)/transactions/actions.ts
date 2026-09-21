@@ -5,6 +5,7 @@ import { buildOwnAccountSet, isTransferRecipient, normalizeRecipient } from "@/l
 import { identityKey, normalizeIban, transactionMatchKey } from "@/lib/counterparty-identity";
 import { upsertUserSettings } from "@/lib/user-settings";
 import { setTransactionRecurring } from "@/lib/recurring";
+import type { TransactionSplitData } from "@/app/(app)/transactions/split-actions";
 import type { CategoryKind } from "@/lib/supabase/database.types";
 
 export async function dismissBookSuggestion(): Promise<{ success: boolean }> {
@@ -40,6 +41,7 @@ export type TransactionRowData = {
   recurringTypicalAmount: number | null;
   isRecurringOutlier: boolean;
   isTransfer: boolean;
+  splits: TransactionSplitData[];
 };
 
 const OUTLIER_THRESHOLD = 0.25;
@@ -84,6 +86,22 @@ export async function getFilteredTransactions(
 
   const typicalAmountByGroup = new Map((recurringGroups ?? []).map((g) => [g.id, g.typical_amount]));
 
+  const txIds = (data ?? []).map((row) => row.id);
+  const { data: splitRows } =
+    txIds.length > 0
+      ? await supabase
+          .from("transaction_splits")
+          .select("id, transaction_id, category_id, book_id, amount, note")
+          .in("transaction_id", txIds)
+          .order("sort_order", { ascending: true })
+      : { data: [] };
+  const splitsByTx = new Map<string, TransactionSplitData[]>();
+  for (const s of splitRows ?? []) {
+    const list = splitsByTx.get(s.transaction_id) ?? [];
+    list.push({ id: s.id, categoryId: s.category_id, bookId: s.book_id, amount: s.amount, note: s.note });
+    splitsByTx.set(s.transaction_id, list);
+  }
+
   return {
     success: true,
     rows: (data ?? []).map((row) => {
@@ -108,6 +126,7 @@ export async function getFilteredTransactions(
         recurringTypicalAmount: typical,
         isRecurringOutlier: isOutlier,
         isTransfer: isTransferRecipient({ recipient: row.recipient, counterpartyIban: row.counterparty_iban }, ownAccountSet),
+        splits: splitsByTx.get(row.id) ?? [],
       };
     }),
   };

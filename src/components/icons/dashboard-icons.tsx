@@ -151,6 +151,17 @@ export function PencilIcon(props: IconProps) {
   );
 }
 
+export function SplitIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 3v6a3 3 0 0 0 3 3h6" />
+      <path d="M18 3v18" />
+      <path d="M6 21v-9" />
+      <path d="m15 6 3 3-3 3" />
+    </svg>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

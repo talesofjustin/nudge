@@ -7,11 +7,13 @@ import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { CategoryPicker } from "@/components/transactions/category-picker";
 import { BookPicker, type BookInfo } from "@/components/transactions/book-picker";
 import { RecipientRuleOffer } from "@/components/transactions/recipient-rule-offer";
+import { TransactionSplitEditor } from "@/components/transactions/transaction-split-editor";
 import { type CategoryInfo } from "@/components/transactions/category-badge";
 import { RefreshIcon } from "@/components/icons/category-icons";
-import { ChevronRightIcon, TransferIcon, TrashIcon } from "@/components/icons/dashboard-icons";
+import { ChevronRightIcon, SplitIcon, TransferIcon, TrashIcon } from "@/components/icons/dashboard-icons";
 import { parseRawDescription } from "@/lib/parse-raw-description";
 import type { TransactionRowData } from "@/app/(app)/transactions/actions";
+import type { TransactionSplitData } from "@/app/(app)/transactions/split-actions";
 
 // Must match the actual number of <th>/<td> cells rendered per row in
 // transactions-view.tsx's getColumns() (checkbox + Date + Recipient + Note
@@ -81,6 +83,7 @@ export function TransactionRow({
   onUpdateCategory,
   onOfferBookRule,
   onOfferCategoryRule,
+  onSplitsChanged,
 }: {
   row: TransactionRowData;
   accountName: string;
@@ -115,11 +118,14 @@ export function TransactionRow({
   ) => Promise<void>;
   onOfferBookRule: (recipient: string, bookId: string) => void;
   onOfferCategoryRule: (recipient: string, categoryId: string) => void;
+  onSplitsChanged: (id: string, splits: TransactionSplitData[]) => void;
 }) {
   const [editingDescription, setEditingDescription] = useState(false);
   const [draft, setDraft] = useState(row.description ?? "");
   const [expanded, setExpanded] = useState(false);
   const [pendingOffer, setPendingOffer] = useState<PendingOffer | null>(null);
+  const [splittingOpen, setSplittingOpen] = useState(false);
+  const isSplit = row.splits.length > 0;
 
   // The picker this follows (BookPicker/CategoryPicker) closes its own
   // popover in the same click that triggers this. Setting pendingOffer
@@ -277,6 +283,17 @@ export function TransactionRow({
             <Tooltip content="Transfers aren't income or expense, so they can't be categorised. Remove this recipient from your own accounts to categorise it.">
               <span className="text-[13px] text-muted-2">—</span>
             </Tooltip>
+          ) : isSplit ? (
+            <Tooltip content={`Split into ${row.splits.length} parts — expand this row to see or edit them.`}>
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="inline-flex h-7 max-w-full items-center gap-1.5 whitespace-nowrap rounded-full border border-dashed border-violet-400 px-2.5 text-[12px] font-medium text-violet-600 transition-opacity hover:opacity-80"
+              >
+                <SplitIcon className="h-3.5 w-3.5 shrink-0" />
+                Split ({row.splits.length})
+              </button>
+            </Tooltip>
           ) : (
             <CategoryPicker
               categories={categories}
@@ -354,6 +371,39 @@ export function TransactionRow({
                   </p>
                 )
               )}
+
+              {!row.isTransfer &&
+                (isSplit || splittingOpen ? (
+                  <TransactionSplitEditor
+                    transactionId={row.id}
+                    parentAmount={row.amount}
+                    parentCategoryId={row.categoryId}
+                    parentNote={row.description}
+                    initialSplits={row.splits}
+                    categories={categories}
+                    books={books}
+                    showBookColumn={showBookColumn}
+                    onCreateCategory={onCreateCategory}
+                    onUpdateCategory={onUpdateCategory}
+                    onSaved={(splits) => {
+                      onSplitsChanged(row.id, splits);
+                      if (splits.length === 0) setSplittingOpen(false);
+                    }}
+                    onUnsplit={() => {
+                      onSplitsChanged(row.id, []);
+                      setSplittingOpen(false);
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSplittingOpen(true)}
+                    className="flex items-center gap-1.5 self-start text-[12.5px] font-medium text-violet-600 hover:underline"
+                  >
+                    <SplitIcon className="h-3.5 w-3.5" />
+                    Split into parts
+                  </button>
+                ))}
 
               <div className="flex items-center gap-2 border-t border-border pt-2">
                 <ConfirmDeleteButton

@@ -21,8 +21,9 @@
 // 20260720155442_add_recurring_group_status.sql,
 // 20260721081720_remove_cash_account_type.sql,
 // 20260721081721_add_category_sort_order.sql,
-// 20260723091220_reset_recurring_groups_for_amount_clustering.sql, and
-// 20260921170520_add_recurring_reference.sql. Shaped
+// 20260723091220_reset_recurring_groups_for_amount_clustering.sql,
+// 20260921170520_add_recurring_reference.sql, and
+// 20260921174309_add_transaction_splits.sql. Shaped
 // the way `supabase gen types typescript` would produce it, so running that command
 // later (once the migrations have been applied) is a drop-in replacement for
 // this file. `Relationships` is left empty here (no typed nested-select
@@ -234,6 +235,42 @@ export type Database = {
           reference?: string | null;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      transaction_splits: {
+        Row: {
+          id: string;
+          transaction_id: string;
+          user_id: string;
+          category_id: string | null;
+          book_id: string | null;
+          amount: number;
+          note: string | null;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          transaction_id: string;
+          user_id: string;
+          category_id?: string | null;
+          book_id?: string | null;
+          amount: number;
+          note?: string | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          transaction_id?: string;
+          user_id?: string;
+          category_id?: string | null;
+          book_id?: string | null;
+          amount?: number;
+          note?: string | null;
+          sort_order?: number;
+          created_at?: string;
         };
         Relationships: [];
       };
