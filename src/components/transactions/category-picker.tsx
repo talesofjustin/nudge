@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -57,8 +57,42 @@ export function CategoryPicker({
   const [kind, setKind] = useState<CategoryKind>("spending");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const [listNode, setListNode] = useState<HTMLDivElement | null>(null);
 
   const current = categories.find((c) => c.id === value) ?? null;
+
+  // ResizeObserver rather than a one-shot effect on `open`: Radix mounts
+  // PopoverContent's children into its portal slightly after the `open`
+  // prop flips, so a plain useEffect keyed on `open` can fire before the
+  // list ref is attached and never gets a second chance to check. The
+  // observer re-fires for the actual mount and any later size change
+  // (e.g. a newly created category making a short list scrollable).
+  useEffect(() => {
+    if (!listNode) return;
+    const update = () => setHasOverflow(listNode.scrollHeight > listNode.clientHeight + 1);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(listNode);
+    return () => observer.disconnect();
+  }, [listNode]);
+
+  // "Never wonder where the category you just made went": scroll it into
+  // view and hold a brief highlight instead of just landing back in an
+  // unchanged-looking list. Runs after the DOM has the new pill in it,
+  // then closes the popover itself once the highlight's had its moment —
+  // still a fast create-and-go flow, just with visual confirmation first.
+  useEffect(() => {
+    if (!justCreatedId) return;
+    const el = document.getElementById(`category-option-${justCreatedId}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const timeout = setTimeout(() => {
+      setJustCreatedId(null);
+      setOpen(false);
+    }, 1400);
+    return () => clearTimeout(timeout);
+  }, [justCreatedId]);
 
   function resetForm() {
     setName("");
@@ -96,8 +130,8 @@ export function CategoryPicker({
       return;
     }
     onChange(created.id, remember);
-    setOpen(false);
     setMode({ view: "list" });
+    setJustCreatedId(created.id);
   }
 
   async function handleSaveEdit() {
@@ -119,6 +153,7 @@ export function CategoryPicker({
         } else {
           setMode({ view: "list" });
           resetForm();
+          setJustCreatedId(null);
         }
       }}
     >
@@ -127,7 +162,7 @@ export function CategoryPicker({
           <CategoryBadge category={current} emptyLabel={emptyLabel} unreviewed={unreviewed} className="max-w-full" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-80">
+      <PopoverContent className="w-96">
         {mode.view === "list" ? (
           <div className="flex flex-col gap-1">
             <button
@@ -141,35 +176,46 @@ export function CategoryPicker({
               <CategoryBadge category={null} />
             </button>
 
-            <div className="themed-scrollbar grid max-h-72 grid-cols-2 gap-1 overflow-y-auto">
-              {categories.map((c) => (
-                <div
-                  key={c.id}
-                  className="group flex items-center gap-0.5 rounded-xl pr-1 hover:bg-canvas"
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onChange(c.id, remember);
-                      setOpen(false);
-                    }}
-                    className="min-w-0 flex-1 px-1.5 py-2 text-left"
+            <div className="relative">
+              <div
+                ref={setListNode}
+                className="themed-scrollbar grid max-h-72 grid-cols-2 gap-1.5 overflow-y-auto"
+              >
+                {categories.map((c) => (
+                  <div
+                    key={c.id}
+                    id={`category-option-${c.id}`}
+                    className={`group relative rounded-full transition-shadow duration-500 ${
+                      justCreatedId === c.id ? "ring-2 ring-violet-400 ring-offset-1 ring-offset-surface" : ""
+                    }`}
                   >
-                    <CategoryBadge category={c} className="max-w-full" />
-                  </button>
-                  {onUpdateCategory && (
-                    <Tooltip content={`Edit ${c.name}`}>
-                      <button
-                        type="button"
-                        onClick={() => startEdit(c)}
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-2 opacity-0 transition-opacity hover:bg-surface hover:text-foreground group-hover:opacity-100"
-                      >
-                        <PencilIcon className="h-3 w-3" />
-                      </button>
-                    </Tooltip>
-                  )}
-                </div>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChange(c.id, remember);
+                        setOpen(false);
+                      }}
+                      className="block w-full text-left"
+                    >
+                      <CategoryBadge category={c} className="w-full max-w-full" />
+                    </button>
+                    {onUpdateCategory && (
+                      <Tooltip content={`Edit ${c.name}`}>
+                        <button
+                          type="button"
+                          onClick={() => startEdit(c)}
+                          className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface text-muted-2 opacity-0 shadow-soft transition-opacity hover:text-foreground group-hover:opacity-100"
+                        >
+                          <PencilIcon className="h-3 w-3" />
+                        </button>
+                      </Tooltip>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {hasOverflow && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-xl bg-gradient-to-t from-surface to-transparent" />
+              )}
             </div>
 
             {recipient && (
