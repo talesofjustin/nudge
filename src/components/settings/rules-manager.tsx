@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { FilterChip } from "@/components/ui/pill";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { CategoryBadge, TransferBadge, type CategoryInfo } from "@/components/transactions/category-badge";
@@ -11,9 +14,13 @@ import {
   deleteRecipientCategoryRule,
   setRecipientBookRule,
   setRecipientCategoryRule,
+  resolveTransferFlag,
   unflagKnownRecipient,
+  getAllRules,
   type UnifiedRule,
 } from "@/app/(app)/transactions/actions";
+
+type RuleKind = "transfer" | "book" | "category";
 
 // Known-recipient (transfer) flags, recipient->book rules, and
 // recipient->category rules are all the same underlying concept — a
@@ -24,14 +31,17 @@ export function RulesManager({
   rules: initialRules,
   books,
   categories,
+  recipients,
   showBookFeature,
 }: {
   rules: UnifiedRule[];
   books: BookInfo[];
   categories: CategoryInfo[];
+  recipients: string[];
   showBookFeature: boolean;
 }) {
   const [rules, setRules] = useState(initialRules);
+  const [adding, setAdding] = useState(false);
 
   // Progressive disclosure: book rules aren't a concept to show or create
   // once there's only one book, even if a stale row exists from before.
@@ -45,16 +55,44 @@ export function RulesManager({
     setRules((prev) => prev.map((r) => (r.id === id ? { ...r, targetId } : r)));
   }
 
+  // Re-fetch rather than guess a new row's shape locally — the add form
+  // covers three differently-shaped underlying tables, and a rule for a
+  // recipient that already has one of this kind silently updates the
+  // existing row (upsert) rather than creating a second, which a naive
+  // local append would show as a duplicate until the next reload anyway.
+  async function handleAdded() {
+    setRules(await getAllRules());
+    setAdding(false);
+  }
+
   return (
     <Card className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-[15px] font-semibold text-ink">Rules</h2>
-        <p className="mt-1 text-[13px] text-muted">
-          Durable decisions about a counterparty — whether they&apos;re a transfer, which book they
-          belong to, or how they&apos;re categorised. Learned automatically from how you edit
-          transactions, or set here directly.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-semibold text-ink">Rules</h2>
+          <p className="mt-1 text-[13px] text-muted">
+            Durable decisions about a counterparty — whether they&apos;re a transfer, which book they
+            belong to, or how they&apos;re categorised. Learned automatically from how you edit
+            transactions, or set here directly.
+          </p>
+        </div>
+        {!adding && (
+          <Button type="button" variant="secondary" size="sm" className="shrink-0" onClick={() => setAdding(true)}>
+            + Add rule
+          </Button>
+        )}
       </div>
+
+      {adding && (
+        <AddRuleForm
+          books={books}
+          categories={categories}
+          recipients={recipients}
+          showBookFeature={showBookFeature}
+          onAdded={handleAdded}
+          onCancel={() => setAdding(false)}
+        />
+      )}
 
       {visibleRules.length === 0 ? (
         <p className="text-[13px] text-muted-2">
@@ -76,6 +114,139 @@ export function RulesManager({
         </div>
       )}
     </Card>
+  );
+}
+
+function AddRuleForm({
+  books,
+  categories,
+  recipients,
+  showBookFeature,
+  onAdded,
+  onCancel,
+}: {
+  books: BookInfo[];
+  categories: CategoryInfo[];
+  recipients: string[];
+  showBookFeature: boolean;
+  onAdded: () => void;
+  onCancel: () => void;
+}) {
+  const [recipient, setRecipient] = useState("");
+  const [kind, setKind] = useState<RuleKind>("transfer");
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [bookId, setBookId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSubmit =
+    recipient.trim().length > 0 &&
+    (kind === "transfer" || (kind === "category" && categoryId) || (kind === "book" && bookId));
+
+  async function handleSubmit() {
+    const name = recipient.trim();
+    if (!name) return;
+    setSubmitting(true);
+    setError(null);
+
+    const result =
+      kind === "transfer"
+        ? await resolveTransferFlag(name, true)
+        : kind === "category" && categoryId
+          ? await setRecipientCategoryRule(name, categoryId)
+          : kind === "book" && bookId
+            ? await setRecipientBookRule(name, bookId)
+            : { success: false };
+
+    setSubmitting(false);
+    if (!result.success) {
+      setError("Could not save this rule.");
+      return;
+    }
+    onAdded();
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-canvas p-3">
+      <Input
+        label="Recipient"
+        list="rule-recipient-options"
+        value={recipient}
+        onChange={(e) => setRecipient(e.target.value)}
+        placeholder="Type or pick a recipient"
+        autoFocus
+      />
+      <datalist id="rule-recipient-options">
+        {recipients.map((r) => (
+          <option key={r} value={r} />
+        ))}
+      </datalist>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[13px] font-medium text-muted">Rule type</span>
+        <div className="flex gap-2">
+          <FilterChip active={kind === "transfer"} onClick={() => setKind("transfer")}>
+            Transfer
+          </FilterChip>
+          <FilterChip active={kind === "category"} onClick={() => setKind("category")}>
+            Category
+          </FilterChip>
+          {showBookFeature && (
+            <FilterChip active={kind === "book"} onClick={() => setKind("book")}>
+              Book
+            </FilterChip>
+          )}
+        </div>
+      </div>
+
+      {kind === "category" && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium text-muted">Category</span>
+          <div className="flex flex-wrap gap-1.5">
+            {categories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCategoryId(c.id)}
+                className={`rounded-full transition-shadow ${
+                  categoryId === c.id ? "ring-2 ring-violet-400 ring-offset-1 ring-offset-canvas" : ""
+                }`}
+              >
+                <CategoryBadge category={c} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {kind === "book" && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium text-muted">Book</span>
+          <div className="flex flex-wrap gap-1.5">
+            {books.map((b) => (
+              <FilterChip key={b.id} active={bookId === b.id} onClick={() => setBookId(b.id)}>
+                {b.name}
+              </FilterChip>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p className="text-[12px] text-danger" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="button" size="sm" onClick={handleSubmit} disabled={!canSubmit || submitting}>
+          {submitting ? "Adding…" : "Add rule"}
+        </Button>
+      </div>
+    </div>
   );
 }
 

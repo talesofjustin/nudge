@@ -590,6 +590,28 @@ export async function applyCategoryRuleToExisting(
   return { success: !error, count: data?.length ?? 0 };
 }
 
+// Backs the recipient field of Settings → Rules' manual "+ Add rule" form —
+// a plain <datalist> of recipients the user has actually transacted with,
+// so picking one is possible without requiring it (a rule for a recipient
+// with no transactions yet, e.g. ahead of a future import, is still valid).
+export async function getDistinctRecipients(): Promise<string[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("transactions")
+    .select("recipient")
+    .eq("user_id", user.id)
+    .not("recipient", "is", null);
+
+  return Array.from(new Set((data ?? []).map((r) => r.recipient as string))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Unified rules — "known recipients" (transfer flags), recipient->book, and
 // recipient->category rules are presented as one list in Settings; the

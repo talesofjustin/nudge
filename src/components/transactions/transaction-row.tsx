@@ -79,6 +79,7 @@ export function TransactionRow({
   onOfferBookRule,
   onOfferCategoryRule,
   onSplitsChanged,
+  onToggleTransfer,
 }: {
   row: TransactionRowData;
   accountName: string;
@@ -113,6 +114,7 @@ export function TransactionRow({
   onOfferBookRule: (recipient: string, bookId: string) => void;
   onOfferCategoryRule: (recipient: string, categoryId: string) => void;
   onSplitsChanged: (id: string, splits: TransactionSplitData[]) => void;
+  onToggleTransfer: (recipient: string, markAsTransfer: boolean) => void;
 }) {
   const [editingDescription, setEditingDescription] = useState(false);
   const [draft, setDraft] = useState(row.description ?? "");
@@ -355,7 +357,28 @@ export function TransactionRow({
                   </button>
                 ))}
 
-              <div className="flex items-center gap-2 border-t border-border pt-2">
+              <div className="flex flex-wrap items-center gap-4 border-t border-border pt-2">
+                {row.recipient &&
+                  (row.isTransfer ? (
+                    <button
+                      type="button"
+                      onClick={() => onToggleTransfer(row.recipient!, false)}
+                      className="flex items-center gap-1.5 text-[12.5px] font-medium text-muted hover:text-foreground"
+                    >
+                      <TransferIcon className="h-3.5 w-3.5" />
+                      Remove transfer flag
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onToggleTransfer(row.recipient!, true)}
+                      className="flex items-center gap-1.5 text-[12.5px] font-medium text-violet-600 hover:underline"
+                    >
+                      <TransferIcon className="h-3.5 w-3.5" />
+                      Mark &quot;{row.recipient}&quot; as a transfer
+                    </button>
+                  ))}
+
                 <ConfirmDeleteButton
                   icon={<TrashIcon className="h-3.5 w-3.5" />}
                   showLabelWithIcon

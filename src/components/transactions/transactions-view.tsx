@@ -19,12 +19,15 @@ import {
   markTransactionsReviewed,
   setRecipientBookRule,
   setRecipientCategoryRule,
+  resolveTransferFlag,
+  unflagKnownRecipient,
   getDuplicateGroups,
   type TransactionRowData,
   type DuplicateGroup,
 } from "@/app/(app)/transactions/actions";
 import type { TransactionSplitData } from "@/app/(app)/transactions/split-actions";
 import { filtersToSearchParams, type FiltersState } from "@/lib/transaction-filters";
+import { identityKey } from "@/lib/counterparty-identity";
 import type { CategoryKind } from "@/lib/supabase/database.types";
 
 type ColumnAlign = "left" | "right" | "center";
@@ -283,6 +286,27 @@ export function TransactionsView({
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, splits } : r)));
   }
 
+  // Marking/unmarking a transfer is a decision about the counterparty, not
+  // this one row — every row sharing its identity (IBAN when known, else
+  // recipient name) flips together, matching the rule's own scope once
+  // applied server-side to future imports too.
+  async function handleToggleTransfer(recipient: string, markAsTransfer: boolean) {
+    const source = rows.find((r) => r.recipient === recipient);
+    const iban = source?.counterpartyIban ?? null;
+    const key = identityKey({ recipient, counterpartyIban: iban });
+
+    setRows((prev) =>
+      prev.map((r) =>
+        identityKey({ recipient: r.recipient, counterpartyIban: r.counterpartyIban }) === key
+          ? { ...r, isTransfer: markAsTransfer }
+          : r,
+      ),
+    );
+
+    if (markAsTransfer) await resolveTransferFlag(recipient, true, iban);
+    else await unflagKnownRecipient(recipient, iban);
+  }
+
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -498,6 +522,7 @@ export function TransactionsView({
                       onOfferBookRule={handleOfferBookRule}
                       onOfferCategoryRule={handleOfferCategoryRule}
                       onSplitsChanged={handleSplitsChanged}
+                      onToggleTransfer={handleToggleTransfer}
                     />
                   ))}
                 </tbody>
