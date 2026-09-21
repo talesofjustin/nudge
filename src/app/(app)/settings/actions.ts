@@ -55,15 +55,17 @@ export async function getAccountsForSettings(): Promise<AccountData[]> {
 
 // The "What's this account for?" question never says "book" — it finds or
 // creates one behind the scenes by the plain-language answer (Personal /
-// Business / Shared / a free-text name), matching case-insensitively so
+// Business / Joint / a free-text name), matching case-insensitively so
 // answering "Business" twice reuses the same book rather than creating
-// duplicates.
+// duplicates. Null (or blank) means "a bit of both" — deliberately no
+// book at all, so a mixed-use account's transactions resolve via
+// recipient rules or manual assignment instead of one default.
 async function findOrCreateBookByName(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-  name: string,
+  name: string | null,
 ): Promise<string | null> {
-  const trimmed = name.trim();
+  const trimmed = name?.trim() ?? "";
   if (!trimmed) return null;
 
   const { data: existing } = await supabase
@@ -87,7 +89,7 @@ async function findOrCreateBookByName(
 export async function createAccount(
   name: string,
   type: AccountType,
-  bookAnswer: string,
+  bookAnswer: string | null,
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   const supabase = await createClient();
   const {

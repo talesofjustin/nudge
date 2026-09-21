@@ -16,11 +16,13 @@ const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-// The three preset answers plus free text — deliberately never says "book"
+// The preset answers plus free text — deliberately never says "book"
 // anywhere in this dialog. Whatever the user answers becomes (or reuses)
-// a book behind the scenes.
-const PRESET_ANSWERS = ["Personal", "Business", "Shared"];
+// a book behind the scenes, except NO_BOOK ("a bit of both"), which
+// deliberately creates no book at all.
+const PRESET_ANSWERS = ["Personal", "Business", "Joint"];
 const OTHER = "__other__";
+const NO_BOOK = "__no_book__";
 
 export function AddAccountDialog({
   open,
@@ -52,21 +54,24 @@ export function AddAccountDialog({
     onClose();
   }
 
-  const resolvedAnswer = answer === OTHER ? otherText.trim() : answer;
-
   async function handleSubmit() {
     if (!name.trim()) {
       setError("Give the account a name.");
       return;
     }
-    if (!resolvedAnswer) {
+    if (answer === null || (answer === OTHER && !otherText.trim())) {
       setError("Let us know what this account is for.");
       return;
     }
 
+    // NO_BOOK is a deliberate choice ("a bit of both"), not "unanswered" —
+    // it resolves to a null bookAnswer, which createAccount treats as
+    // "don't create or assign a book at all".
+    const bookAnswer = answer === NO_BOOK ? null : answer === OTHER ? otherText.trim() : answer;
+
     setSubmitting(true);
     setError(null);
-    const res = await createAccount(name.trim(), type, resolvedAnswer);
+    const res = await createAccount(name.trim(), type, bookAnswer);
     setSubmitting(false);
 
     if (!res.success || !res.id) {
@@ -111,10 +116,20 @@ export function AddAccountDialog({
                 {a}
               </FilterChip>
             ))}
+            <FilterChip active={answer === NO_BOOK} onClick={() => setAnswer(NO_BOOK)}>
+              A bit of both
+            </FilterChip>
             <FilterChip active={answer === OTHER} onClick={() => setAnswer(OTHER)}>
               Something else
             </FilterChip>
           </div>
+          <p className="text-[12px] text-muted-2">
+            <span className="font-medium text-muted">Joint</span> — a shared account with someone else; everything
+            on it defaults to that one book.{" "}
+            <span className="font-medium text-muted">A bit of both</span> — you use it for more than one purpose
+            (PayPal, a credit card); no default book, so each transaction resolves via recipient rules or manual
+            assignment instead.
+          </p>
           {answer === OTHER && (
             <Input
               placeholder="What's it for?"

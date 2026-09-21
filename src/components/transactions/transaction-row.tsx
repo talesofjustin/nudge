@@ -1,12 +1,10 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { CategoryPicker } from "@/components/transactions/category-picker";
 import { BookPicker, type BookInfo } from "@/components/transactions/book-picker";
-import { RecipientRuleOffer } from "@/components/transactions/recipient-rule-offer";
 import { TransactionSplitEditor } from "@/components/transactions/transaction-split-editor";
 import { type CategoryInfo } from "@/components/transactions/category-badge";
 import { RefreshIcon } from "@/components/icons/category-icons";
@@ -65,8 +63,6 @@ function RawDescriptionDetails({ raw, counterpartyIban }: { raw: string; counter
   );
 }
 
-type PendingOffer = { kind: "book-create"; targetId: string; label: string };
-
 export function TransactionRow({
   row,
   accountName,
@@ -74,7 +70,6 @@ export function TransactionRow({
   categories,
   showBookColumn,
   selected,
-  bookRuleTargetId,
   onToggleSelect,
   onUpdate,
   onDelete,
@@ -91,7 +86,6 @@ export function TransactionRow({
   categories: CategoryInfo[];
   showBookColumn: boolean;
   selected: boolean;
-  bookRuleTargetId: string | null;
   onToggleSelect: (id: string) => void;
   onUpdate: (
     id: string,
@@ -123,17 +117,8 @@ export function TransactionRow({
   const [editingDescription, setEditingDescription] = useState(false);
   const [draft, setDraft] = useState(row.description ?? "");
   const [expanded, setExpanded] = useState(false);
-  const [pendingOffer, setPendingOffer] = useState<PendingOffer | null>(null);
   const [splittingOpen, setSplittingOpen] = useState(false);
   const isSplit = row.splits.length > 0;
-
-  // The picker this follows (BookPicker/CategoryPicker) closes its own
-  // popover in the same click that triggers this. Setting pendingOffer
-  // (which opens a second popover anchored to the same trigger) in that
-  // same tick loses a race against Radix's dismissable-layer handling for
-  // the one that's closing, and the new popover closes before it ever
-  // paints. A short delay lets that settle first.
-  const OFFER_POPOVER_DELAY_MS = 80;
 
   function commitDescription() {
     setEditingDescription(false);
@@ -142,18 +127,13 @@ export function TransactionRow({
     }
   }
 
-  function handleBookChange(bookId: string | null) {
+  // "Remember for this recipient" happens inside the picker itself (a
+  // toggle alongside the book list), same mechanism as CategoryPicker —
+  // no follow-up popup, so it applies in the same gesture as picking.
+  function handleBookChange(bookId: string | null, remember: boolean) {
     onUpdate(row.id, { bookId });
-    if (bookId && row.recipient && bookRuleTargetId === null) {
-      const book = books.find((b) => b.id === bookId);
-      if (book) {
-        setTimeout(
-          () => setPendingOffer({ kind: "book-create", targetId: bookId, label: book.name }),
-          OFFER_POPOVER_DELAY_MS,
-        );
-      }
-    } else {
-      setPendingOffer(null);
+    if (bookId && row.recipient && remember) {
+      onOfferBookRule(row.recipient, bookId);
     }
   }
 
@@ -176,16 +156,6 @@ export function TransactionRow({
     if (categoryId && row.recipient && remember) {
       onOfferCategoryRule(row.recipient, categoryId);
     }
-  }
-
-  function confirmOffer() {
-    if (!pendingOffer || !row.recipient) return;
-    onOfferBookRule(row.recipient, pendingOffer.targetId);
-    setPendingOffer(null);
-  }
-
-  function offerMessage(offer: PendingOffer): string {
-    return `Always put ${row.recipient} in ${offer.label}?`;
   }
 
   const columnCount = showBookColumn ? COLUMN_COUNT_WITH_BOOK : COLUMN_COUNT_WITHOUT_BOOK;
@@ -308,27 +278,7 @@ export function TransactionRow({
         </td>
         {showBookColumn && (
           <td className="truncate px-3 align-middle">
-            <Popover
-              open={pendingOffer?.kind === "book-create"}
-              onOpenChange={(next) => {
-                if (!next) setPendingOffer(null);
-              }}
-            >
-              <PopoverAnchor asChild>
-                <div>
-                  <BookPicker books={books} value={row.bookId} onChange={handleBookChange} />
-                </div>
-              </PopoverAnchor>
-              {pendingOffer?.kind === "book-create" && (
-                <PopoverContent align="start">
-                  <RecipientRuleOffer
-                    message={offerMessage(pendingOffer)}
-                    onConfirm={confirmOffer}
-                    onDismiss={() => setPendingOffer(null)}
-                  />
-                </PopoverContent>
-              )}
-            </Popover>
+            <BookPicker books={books} value={row.bookId} recipient={row.recipient} onChange={handleBookChange} />
           </td>
         )}
         <td className="truncate px-3 align-middle text-[13px] text-muted">{accountName}</td>

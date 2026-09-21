@@ -8,7 +8,6 @@ import { TransactionRow } from "@/components/transactions/transaction-row";
 import { DuplicateReview } from "@/components/transactions/duplicate-review";
 import type { CategoryInfo } from "@/components/transactions/category-badge";
 import type { BookInfo } from "@/components/transactions/book-picker";
-import { identityKey } from "@/lib/counterparty-identity";
 import {
   getFilteredTransactions,
   updateTransaction,
@@ -16,7 +15,6 @@ import {
   updateCategory,
   deleteTransactions,
   markTransactionsReviewed,
-  getRecipientBookRules,
   setRecipientBookRule,
   setRecipientCategoryRule,
   getDuplicateGroups,
@@ -73,7 +71,6 @@ export function TransactionsView({
   const [showOnlyUncategorized, setShowOnlyUncategorized] = useState(false);
   const [showOnlyUnassignedBook, setShowOnlyUnassignedBook] = useState(false);
   const [showOnlyUnreviewed, setShowOnlyUnreviewed] = useState(false);
-  const [bookRules, setBookRules] = useState<Map<string, string>>(new Map());
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
   const [duplicateBannerDismissed, setDuplicateBannerDismissed] = useState(false);
   const [reviewingDuplicates, setReviewingDuplicates] = useState(false);
@@ -87,15 +84,7 @@ export function TransactionsView({
 
   useEffect(() => {
     (async () => {
-      const [bookRuleList, duplicates] = await Promise.all([getRecipientBookRules(), getDuplicateGroups()]);
-      setBookRules(
-        new Map(
-          bookRuleList
-            .map((r) => [identityKey({ recipient: r.recipient, counterpartyIban: r.counterpartyIban }), r.bookId] as const)
-            .filter((entry): entry is [string, string] => entry[0] !== null),
-        ),
-      );
-      setDuplicateGroups(duplicates);
+      setDuplicateGroups(await getDuplicateGroups());
     })();
   }, []);
 
@@ -241,8 +230,6 @@ export function TransactionsView({
 
   async function handleOfferBookRule(recipient: string, bookId: string) {
     const row = rows.find((r) => r.recipient === recipient);
-    const key = identityKey({ recipient, counterpartyIban: row?.counterpartyIban });
-    if (key) setBookRules((prev) => new Map(prev).set(key, bookId));
     await setRecipientBookRule(recipient, bookId, row?.counterpartyIban ?? null);
   }
 
@@ -422,30 +409,26 @@ export function TransactionsView({
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleRows.map((row) => {
-                    const key = identityKey({ recipient: row.recipient, counterpartyIban: row.counterpartyIban });
-                    return (
-                      <TransactionRow
-                        key={row.id}
-                        row={row}
-                        accountName={accountsById.get(row.accountId) ?? "Unknown account"}
-                        books={books}
-                        categories={categories}
-                        showBookColumn={showBookFeature}
-                        selected={selectedIds.has(row.id)}
-                        bookRuleTargetId={key ? (bookRules.get(key) ?? null) : null}
-                        onToggleSelect={toggleSelect}
-                        onUpdate={handleUpdate}
-                        onDelete={handleDeleteRow}
-                        onFilterByRecipient={handleFilterByRecipient}
-                        onCreateCategory={handleCreateCategory}
-                        onUpdateCategory={handleUpdateCategory}
-                        onOfferBookRule={handleOfferBookRule}
-                        onOfferCategoryRule={handleOfferCategoryRule}
-                        onSplitsChanged={handleSplitsChanged}
-                      />
-                    );
-                  })}
+                  {visibleRows.map((row) => (
+                    <TransactionRow
+                      key={row.id}
+                      row={row}
+                      accountName={accountsById.get(row.accountId) ?? "Unknown account"}
+                      books={books}
+                      categories={categories}
+                      showBookColumn={showBookFeature}
+                      selected={selectedIds.has(row.id)}
+                      onToggleSelect={toggleSelect}
+                      onUpdate={handleUpdate}
+                      onDelete={handleDeleteRow}
+                      onFilterByRecipient={handleFilterByRecipient}
+                      onCreateCategory={handleCreateCategory}
+                      onUpdateCategory={handleUpdateCategory}
+                      onOfferBookRule={handleOfferBookRule}
+                      onOfferCategoryRule={handleOfferCategoryRule}
+                      onSplitsChanged={handleSplitsChanged}
+                    />
+                  ))}
                 </tbody>
               </table>
             </div>
