@@ -29,13 +29,23 @@ export async function getUserSettings(): Promise<UserSettings> {
     };
   }
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("user_settings")
     .select(
       "decimal_separator, timezone, payday_anchor_day, budget_tip_dismissed, theme, book_suggestion_dismissed",
     )
     .eq("user_id", user.id)
     .maybeSingle();
+
+  // A query error here (e.g. schema drift between this select and the
+  // actual table — a migration that was never applied) used to fail
+  // silently: `data` falls through to `null` below exactly like "no row
+  // yet", so every setting quietly reads back as unset even though it's
+  // saved. That's indistinguishable from a real bug in the UI, so it's
+  // logged loudly instead of swallowed.
+  if (error) {
+    console.error("getUserSettings query failed:", error.message);
+  }
 
   return {
     decimalSeparator: data?.decimal_separator ?? null,

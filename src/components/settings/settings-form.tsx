@@ -11,7 +11,14 @@ import { upsertUserSettings, type UserSettings } from "@/lib/user-settings";
 import { getTimezoneOptions } from "@/lib/timezone";
 import type { DecimalSeparator } from "@/lib/supabase/database.types";
 
+// `navigator` doesn't exist during SSR (this component's initial render
+// happens on the server before this ever reaches a browser). Only relevant
+// when `settings.decimalSeparator` is null — e.g. a brand new user who
+// hasn't imported anything yet — but when it hits, it used to crash the
+// whole page rather than just fail to detect a locale. Guarded here; the
+// client re-runs this on hydration and picks up the real browser locale.
 function detectDecimalSeparator(): DecimalSeparator {
+  if (typeof navigator === "undefined") return "period";
   const parts = new Intl.NumberFormat(navigator.language).formatToParts(1.1);
   const decimal = parts.find((p) => p.type === "decimal");
   return decimal?.value === "," ? "comma" : "period";
